@@ -9,6 +9,11 @@ import RegisterPage from "../pages/RegisterPage";
 import { useAuth } from "../auth/useAuth";
 import { roleHome } from "../auth/roleHome";
 import OAuthCallbackPage from "../pages/OAuthCallbackPage";
+import MenuPage from "../pages/MenuPage";
+import ItemDetailPage from "../pages/ItemDetailPage";
+import CartPage from "../pages/CartPage";
+import OrdersPage from "../pages/OrdersPage";
+import CustomerLayout from "../layout/CustomerLayout";
 
 function PublicOnly({ children }: { children: React.ReactNode }) {
   const { loading, user } = useAuth();
@@ -65,6 +70,12 @@ export default function AppRoutes() {
         }
       />
 
+      <Route element={<CustomerLayout />}>
+        <Route path="/menu" element={<MenuPage />} />
+        <Route path="/cart" element={<CartPage />} />
+        <Route path="/orders" element={<OrdersPage />} /> 
+      </Route>
+      <Route path="/menu/item/:id" element={<ItemDetailPage />} />
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
       <Route path="*" element={<Navigate to="/login" replace />} />

@@ -34,7 +34,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const r = await meApi();
         setUser(r.user);
       } catch {
-        // token hỏng / hết hạn / wrong secret => clear
         clearAccessToken();
         setUser(null);
       } finally {
