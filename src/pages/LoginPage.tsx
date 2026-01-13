@@ -43,13 +43,10 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-[100svh] bg-[#EEF1F5] flex items-center justify-center font-sans">
-      {/* Main Wrapper: 
-          - Mobile: Full màn hình, dọc
-          - Desktop: Bo góc, ngang, có shadow lớn
-      */}
+      {/* Main Wrapper */}
       <div className="w-full h-full min-h-[100svh] md:min-h-0 md:h-auto md:max-w-[900px] md:flex md:rounded-[32px] md:shadow-2xl overflow-hidden bg-white">
         
-        {/* LEFT SIDE: Hero Section (Luôn hiện trên Mobile, là cột trái trên Desktop) */}
+        {/* LEFT SIDE: Hero Section */}
         <div className="bg-slate-900 px-6 pt-16 pb-20 md:pb-16 md:w-1/2 flex flex-col items-center justify-center text-center relative shrink-0 transition-all duration-500">
           <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[22px] bg-white/10 backdrop-blur-md text-[#E2B13C] mb-4 border border-white/20 shadow-xl">
             <UtensilsCrossed size={40} strokeWidth={2.5} />
@@ -61,7 +58,7 @@ export default function LoginPage() {
             Scan. Order. Enjoy.
           </p>
 
-          {/* Desktop Only: Một vài đặc điểm nổi bật */}
+          {/* Desktop Only */}
           <div className="hidden md:block mt-12 space-y-4 text-left">
             {['Quick QR Payment', 'Real-time Tracking', 'Exclusive Offers'].map((item) => (
               <div key={item} className="flex items-center gap-3 text-white/60 text-sm">
@@ -72,7 +69,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* RIGHT SIDE: Login Form (Overlapping trên Mobile, là cột phải trên Desktop) */}
+        {/* RIGHT SIDE: Login Form */}
         <div className="-mt-10 md:mt-0 bg-white rounded-t-[28px] md:rounded-none px-8 pt-10 pb-12 md:p-12 md:w-1/2 flex-1 relative z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.04)] md:shadow-none flex flex-col justify-center">
           <div className="max-w-[340px] mx-auto w-full">
             <h2 className="text-2xl md:text-3xl font-bold text-slate-800 mb-2">Welcome Back</h2>

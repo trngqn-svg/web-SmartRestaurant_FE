@@ -76,7 +76,6 @@ export async function refreshAccessToken(): Promise<string> {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
-    // ✅ app endpoint
     const res = await refreshClient.post("/api/auth/refresh");
     const newToken = (res.data as any)?.accessToken as string;
 
@@ -122,7 +121,6 @@ api.interceptors.response.use(
     if (status !== 401 || original?._retry) return Promise.reject(error);
 
     const url = original.url ?? "";
-    // ✅ app endpoints
     if (url.includes("/api/auth/refresh") || url.includes("/api/auth/login")) {
       clearAccessToken();
       return Promise.reject(error);
@@ -161,5 +159,10 @@ api.interceptors.response.use(
     }
   }
 );
+
+export const publicApi = axios.create({
+  baseURL: BASE_URL,
+  withCredentials: true,
+});
 
 export default api;

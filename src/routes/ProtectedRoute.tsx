@@ -11,9 +11,9 @@ function roleHome(role: Role) {
 }
 
 type Props = {
-  roles?: Role[];               // nếu không truyền roles => chỉ cần login
+  roles?: Role[];
   children: React.ReactNode;
-  redirectTo?: string;          // default: /login
+  redirectTo?: string;
 };
 
 export default function ProtectedRoute({
@@ -26,17 +26,14 @@ export default function ProtectedRoute({
 
   if (loading) return null;
 
-  // chưa login
   if (!user) {
     return <Navigate to={redirectTo} replace state={{ from: location }} />;
   }
 
-  // có login nhưng route yêu cầu role cụ thể
   if (roles && roles.length > 0) {
     const userRole = user.role as Role;
 
     if (!roles.includes(userRole)) {
-      // sai role => đưa về trang đúng role của họ
       return <Navigate to={roleHome(userRole)} replace />;
     }
   }
