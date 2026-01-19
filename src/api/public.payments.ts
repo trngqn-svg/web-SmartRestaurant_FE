@@ -1,58 +1,36 @@
-// src/api/public.payments.ts
 import { publicApi } from "./axios";
 
 function errMsg(e: any) {
   return e?.response?.data?.message || e?.message || "Request failed";
 }
 
-export type MockPaymentStatus = "pending" | "succeeded" | "failed";
-
-export async function createPaymentApi(billId: string, amountCents?: number) {
+export async function createVnpayPaymentApi(billId: string) {
   try {
-    const res = await publicApi.post(`/public/bills/${billId}/payments`, {
-      provider: "mock",
-      amountCents,
-    });
+    const res = await publicApi.post(`/api/payments/vnpay/create`, { billId });
     return res.data as {
-      ok: boolean;
-      provider: "mock";
       billId: string;
-      paymentId: string;
-      checkoutUrl: string;
+      sessionId: string;
+      tableId: string;
+      txnRef: string;
+      amountVnd: number;
+      paymentUrl: string;
     };
   } catch (e: any) {
     throw new Error(errMsg(e));
   }
 }
 
-
-export async function mockPaySuccessApi(paymentId: string) {
+export async function verifyVnpayReturnApi(queryString: string) {
   try {
-    const res = await publicApi.post(`/webhooks/mock-payments/${paymentId}/success`);
-    return res.data as { ok: boolean; billId?: string; paymentId: string };
-  } catch (e: any) {
-    throw new Error(errMsg(e));
-  }
-}
-
-export async function mockPayFailApi(paymentId: string) {
-  try {
-    const res = await publicApi.post(`/webhooks/mock-payments/${paymentId}/fail`);
-    return res.data as { ok: boolean; paymentId: string; status: "failed" };
-  } catch (e: any) {
-    throw new Error(errMsg(e));
-  }
-}
-
-export async function getMockPaymentApi(paymentId: string) {
-  try {
-    const res = await publicApi.get(`/public/payments/mock/${paymentId}`);
+    const qs = queryString?.startsWith("?") ? queryString : `?${queryString || ""}`;
+    const res = await publicApi.get(`/api/payments/vnpay/return${qs}`);
     return res.data as {
-      paymentId: string;
-      billId: string;
-      amountCents: number;
-      status: MockPaymentStatus;
-      createdAt: string;
+      ok: boolean;
+      verified: boolean;
+      txnRef: string;
+      responseCode: string;
+      transactionNo?: string;
+      message?: string;
     };
   } catch (e: any) {
     throw new Error(errMsg(e));
