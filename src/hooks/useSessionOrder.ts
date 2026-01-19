@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { openSessionApi } from "../api/public.order";
+import { openSessionApi, type OpenSessionRes } from "../api/public.order";
 
-type Stored = { orderId: string; token: string };
+type Stored = { orderId: string; sessionKey: string };
 
 function orderKey(tableId: string) {
   return `sr.orderSession.${tableId}`;
@@ -12,7 +12,7 @@ function readStored(tableId: string): Stored | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Stored;
-    if (!parsed?.orderId || !parsed?.token) return null;
+    if (!parsed?.orderId || !parsed?.sessionKey) return null;
     return parsed;
   } catch {
     return null;
@@ -29,6 +29,7 @@ export function clearStoredOrderId(tableId: string) {
 
 export function useSessionOrder(table: string, token: string) {
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [sessionKey, setSessionKey] = useState<string | null>(null);
   const [loadingOrder, setLoadingOrder] = useState(true);
   const [orderErr, setOrderErr] = useState<string | null>(null);
 
@@ -42,21 +43,27 @@ export function useSessionOrder(table: string, token: string) {
 
         if (!table || !token) throw new Error("Invalid table/token");
 
+        // ✅ luôn gọi openSession để lấy sessionKey hiện tại
+        const res: OpenSessionRes = await openSessionApi({ table, token });
+        if (cancelled) return;
+
+        setSessionKey(res.sessionKey);
+
+        // ✅ nếu cache cùng sessionKey thì reuse orderId cũ, còn khác thì dùng orderId mới
         const stored = readStored(table);
-        if (stored && stored.token === token) {
+        if (stored && stored.sessionKey === res.sessionKey) {
           setOrderId(stored.orderId);
           return;
         }
 
-        clearStoredOrderId(table);
-
-        const res = await openSessionApi({ table, token });
-        if (cancelled) return;
-
+        // session mới -> dùng orderId từ backend và overwrite cache
         setOrderId(res.orderId);
-        writeStored(table, { orderId: res.orderId, token });
+        writeStored(table, { orderId: res.orderId, sessionKey: res.sessionKey });
       } catch (e: any) {
         if (!cancelled) setOrderErr(e?.message || "Can not open session");
+        clearStoredOrderId(table);
+        setOrderId(null);
+        setSessionKey(null);
       } finally {
         if (!cancelled) setLoadingOrder(false);
       }
@@ -68,5 +75,5 @@ export function useSessionOrder(table: string, token: string) {
     };
   }, [table, token]);
 
-  return { orderId, loadingOrder, orderErr, setOrderId };
+  return { orderId, sessionKey, loadingOrder, orderErr, setOrderId };
 }

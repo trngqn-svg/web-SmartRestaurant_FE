@@ -66,25 +66,3 @@ export async function getPublicMenuApi(params: { table: string; token: string })
     throw new Error(pickErrMessage(e));
   }
 }
-
-export async function listPublicItemReviewsApi(args: {
-  tableId: string;
-  token: string;
-  itemId: string;
-  page?: number;
-  limit?: number;
-}) {
-  const { tableId, token, itemId, page = 1, limit = 10 } = args;
-  const qs = new URLSearchParams({
-    table: tableId,
-    token,
-    page: String(page),
-    limit: String(limit),
-  });
-  try {
-    const res = await publicApi.get(`/public/menu/items/${itemId}/reviews?${qs.toString()}`)
-    return res.data;
-  } catch (e: any) {
-    throw new Error(pickErrMessage(e));
-  }
-}

@@ -1,4 +1,7 @@
 export function formatMoneyFromCents(priceCents: number) {
-  const v = Math.round(priceCents / 100);
-  return v.toLocaleString("vi-VN") + "$";
+  const v = priceCents / 100;
+  return v.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }) + "$";
 }
