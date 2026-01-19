@@ -9,17 +9,10 @@ import {
   markServedApi,
   type StaffOrder,
 } from "../../api/staff.orders";
-import { useAuth } from "../../auth/AuthProvider";
-import {
-  LogOut,
-  Wifi,
-  WifiOff,
-  StickyNote,
-  BadgeCheck,
-} from "lucide-react";
-import { config } from '../../config/websocket';
+import { StickyNote, BadgeCheck } from "lucide-react";
+import { config } from "../../config/websocket";
 
-type TabKey = "pending" | "accepted" | "kitchen" | "ready_to_service" | "rejected";
+type OrderTabKey = "pending" | "accepted" | "kitchen" | "ready_to_service" | "rejected";
 
 type UiOrder = StaffOrder & {
   note?: string;
@@ -33,7 +26,7 @@ type UiOrder = StaffOrder & {
     modifiers?: Array<{
       groupName?: string;
       optionNames?: string[];
-      optionIds?: string[];
+      options?: Array<{ optionName?: string }>;
       priceAdjustmentCents?: number;
     }>;
   }>;
@@ -83,74 +76,76 @@ function statusMeta(status?: string) {
 function StatusPill({ status }: { status?: string }) {
   const m = statusMeta(status);
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-extrabold tracking-wide",
-        m.cls
-      )}
-      title={status || "unknown"}
-    >
+    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-extrabold tracking-wide", m.cls)}>
       {m.text}
     </span>
   );
 }
 
-export default function WaiterHomePage() {
-  const { logout } = useAuth();
-
-  const [connected, setConnected] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
-
-  const [tab, setTab] = useState<TabKey>("pending");
+export default function WaiterOrdersPage() {
+  const [orderTab, setOrderTab] = useState<OrderTabKey>("pending");
 
   const [pending, setPending] = useState<UiOrder[]>([]);
   const [accepted, setAccepted] = useState<UiOrder[]>([]);
   const [kitchen, setKitchen] = useState<UiOrder[]>([]);
-  const [ready, setReady] = useState<UiOrder[]>([]);
+  const [readyToServe, setReadyToServe] = useState<UiOrder[]>([]);
   const [rejected, setRejected] = useState<UiOrder[]>([]);
 
-  const [loadingList, setLoadingList] = useState(true);
-  const [listErr, setListErr] = useState<string | null>(null);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [ordersErr, setOrdersErr] = useState<string | null>(null);
 
   const [actingKey, setActingKey] = useState<string | null>(null);
   const [actErr, setActErr] = useState<string | null>(null);
-  const [loggingOut, setLoggingOut] = useState(false);
 
-  async function loadLists() {
+  const socketRef = useRef<Socket | null>(null);
+
+  function pickOrders(res: any): any[] {
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.orders)) return res.orders;
+    return [];
+  }
+
+  async function loadOrders() {
     try {
-      setListErr(null);
-      setLoadingList(true);
-
-      const [p, a, k, r, rej] = await Promise.all([
+      const [p, a, k, ready, rts, rej] = await Promise.all([
         listStaffOrdersApi({ status: "pending" }),
         listStaffOrdersApi({ status: "accepted" }),
         listStaffOrdersApi({ status: "preparing" }),
+        listStaffOrdersApi({ status: "ready" }),
         listStaffOrdersApi({ status: "ready_to_service" }),
         listStaffOrdersApi({ status: "cancelled" }),
       ]);
 
-      setPending(p as any);
-      setAccepted(a as any);
-      setKitchen(k as any);
-      setReady(r as any);
-      setRejected(rej as any);
+      const pendingOrders = pickOrders(p);
+      const acceptedOrders = pickOrders(a);
+      const kitchenOrders = [...pickOrders(k), ...pickOrders(ready)];
+      const readyToServeOrders = pickOrders(rts);
+      const rejectedOrders = pickOrders(rej);
+
+      setPending(pendingOrders as any);
+      setAccepted(acceptedOrders as any);
+
+      setKitchen(
+        kitchenOrders.filter((o, idx, arr) => arr.findIndex((x) => x.orderId === o.orderId) === idx) as any
+      );
+
+      setReadyToServe(readyToServeOrders as any);
+      setRejected(rejectedOrders as any);
     } catch (e: any) {
-      setListErr(e?.message || "Load lists failed");
+      setOrdersErr(e?.message || "Load orders failed");
     } finally {
-      setLoadingList(false);
+      setLoadingOrders(false);
     }
   }
 
   useEffect(() => {
-    loadLists();
+    loadOrders();
   }, []);
 
+  // socket refresh orders only
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
-    if (!token) {
-      setConnected(false);
-      return;
-    }
+    if (!token) return;
 
     if (socketRef.current) {
       try {
@@ -162,45 +157,29 @@ export default function WaiterHomePage() {
     const socket = io(config.WS_URL, { auth: { token }, transports: ["websocket"] });
     socketRef.current = socket;
 
-    const onConnect = () => setConnected(true);
-    const onDisconnect = () => setConnected(false);
-    const onConnectError = () => setConnected(false);
-
-    const refresh = () => loadLists();
-
-    socket.on("connect", onConnect);
-    socket.on("disconnect", onDisconnect);
-    socket.on("connect_error", onConnectError);
-
-    socket.on("order.submitted", refresh);
-    socket.on("order.ready_to_serve", refresh);
-    socket.on("order.status_changed", refresh);
+    const refreshOrders = () => loadOrders();
+    socket.on("order.submitted", refreshOrders);
+    socket.on("order.ready_to_serve", refreshOrders);
+    socket.on("order.status_changed", refreshOrders);
 
     return () => {
       try {
-        socket.off("connect", onConnect);
-        socket.off("disconnect", onDisconnect);
-        socket.off("connect_error", onConnectError);
-
-        socket.off("order.submitted", refresh);
-        socket.off("order.ready_to_serve", refresh);
-        socket.off("order.status_changed", refresh);
-
+        socket.off("order.submitted", refreshOrders);
+        socket.off("order.ready_to_serve", refreshOrders);
+        socket.off("order.status_changed", refreshOrders);
         socket.disconnect();
       } catch {}
       socketRef.current = null;
-      setConnected(false);
     };
   }, []);
 
   async function accept(orderId: string) {
-    if (loggingOut) return;
     const key = `pending:${orderId}:accept`;
     try {
       setActErr(null);
       setActingKey(key);
       await acceptOrderApi(orderId);
-      await loadLists();
+      await loadOrders();
     } catch (e: any) {
       setActErr(e?.message || "Accept failed");
     } finally {
@@ -209,13 +188,12 @@ export default function WaiterHomePage() {
   }
 
   async function reject(orderId: string) {
-    if (loggingOut) return;
     const key = `pending:${orderId}:reject`;
     try {
       setActErr(null);
       setActingKey(key);
       await rejectOrderApi(orderId);
-      await loadLists();
+      await loadOrders();
     } catch (e: any) {
       setActErr(e?.message || "Reject failed");
     } finally {
@@ -224,13 +202,12 @@ export default function WaiterHomePage() {
   }
 
   async function markServed(orderId: string) {
-    if (loggingOut) return;
     const key = `ready:${orderId}:served`;
     try {
       setActErr(null);
       setActingKey(key);
       await markServedApi(orderId);
-      await loadLists();
+      await loadOrders();
     } catch (e: any) {
       setActErr(e?.message || "Mark served failed");
     } finally {
@@ -238,46 +215,24 @@ export default function WaiterHomePage() {
     }
   }
 
-  async function onLogout() {
-    if (loggingOut) return;
-    setLoggingOut(true);
-    try {
-      try {
-        socketRef.current?.disconnect();
-      } catch {}
-      socketRef.current = null;
-
-      setConnected(false);
-      setPending([]);
-      setAccepted([]);
-      setKitchen([]);
-      setReady([]);
-      setRejected([]);
-
-      await logout();
-    } finally {
-      setLoggingOut(false);
-    }
-  }
-
-  const counts = useMemo(
+  const orderCounts = useMemo(
     () => ({
       pending: pending.length,
       accepted: accepted.length,
       kitchen: kitchen.length,
-      ready: ready.length,
+      ready_to_service: readyToServe.length,
       rejected: rejected.length,
     }),
-    [pending.length, accepted.length, kitchen.length, ready.length, rejected.length]
+    [pending.length, accepted.length, kitchen.length, readyToServe.length, rejected.length]
   );
 
-  const list = useMemo(() => {
-    if (tab === "pending") return pending;
-    if (tab === "accepted") return accepted;
-    if (tab === "kitchen") return kitchen;
-    if (tab === "ready_to_service") return ready;
+  const orderList = useMemo(() => {
+    if (orderTab === "pending") return pending;
+    if (orderTab === "accepted") return accepted;
+    if (orderTab === "kitchen") return kitchen;
+    if (orderTab === "ready_to_service") return readyToServe;
     return rejected;
-  }, [tab, pending, accepted, kitchen, ready, rejected]);
+  }, [orderTab, pending, accepted, kitchen, readyToServe, rejected]);
 
   function OrderCard({ o }: { o: UiOrder }) {
     const orderNote = (o as any).orderNote || (o as any).note || "";
@@ -296,18 +251,13 @@ export default function WaiterHomePage() {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <div className="text-sm font-extrabold text-slate-900">{tableLabel}</div>
-
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-bold text-slate-700">
                 #{String((o as any).orderId).slice(-6)}
               </span>
-
               <StatusPill status={status} />
             </div>
-
             {(o as any).submittedAt ? (
-              <div className="mt-1 text-xs text-slate-500">
-                {new Date((o as any).submittedAt).toLocaleString()}
-              </div>
+              <div className="mt-1 text-xs text-slate-500">{new Date((o as any).submittedAt).toLocaleString()}</div>
             ) : null}
           </div>
 
@@ -339,27 +289,34 @@ export default function WaiterHomePage() {
 
                       {(it.modifiers?.length ?? 0) > 0 ? (
                         <div className="mt-1 space-y-1 text-xs text-slate-700">
-                          {it.modifiers.map((m: any, j: number) => (
-                            <div key={j} className="flex flex-wrap items-center gap-1">
-                              <span className="font-semibold text-slate-800">{m.groupName || "Modifier"}:</span>
-                              <span className="text-slate-700">
-                                {m.options?.length && m.options?.map((o: any) => o.optionName).join(", ")}
-                              </span>
-                              {typeof m.priceAdjustmentCents === "number" && m.priceAdjustmentCents !== 0 ? (
-                                <span className="ml-1 font-semibold text-slate-900">
-                                  (+{formatMoneyFromCents(m.priceAdjustmentCents)})
-                                </span>
-                              ) : null}
-                            </div>
-                          ))}
+                          {it.modifiers.map((m: any, j: number) => {
+                            const picked =
+                              (Array.isArray(m.optionNames) && m.optionNames.length > 0
+                                ? m.optionNames
+                                : Array.isArray(m.options)
+                                ? m.options.map((x: any) => x.optionName).filter(Boolean)
+                                : []) as string[];
+
+                            return (
+                              <div key={j} className="flex flex-wrap items-center gap-1">
+                                <span className="font-semibold text-slate-800">{m.groupName || "Modifier"}:</span>
+                                <span className="text-slate-700">{picked.join(", ") || "-"}</span>
+                                {typeof m.priceAdjustmentCents === "number" && m.priceAdjustmentCents !== 0 ? (
+                                  <span className="ml-1 font-semibold text-slate-900">
+                                    (+{formatMoneyFromCents(m.priceAdjustmentCents)})
+                                  </span>
+                                ) : null}
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : null}
 
-                      {it.note ? <div className="mt-0.5 text-xs text-slate-500">
-                        <span className="font-semibold text-slate-800">Note:</span> 
-                        {" "}“{it.note}”
-                        </div> : null
-                      }
+                      {it.note ? (
+                        <div className="mt-0.5 text-xs text-slate-500">
+                          <span className="font-semibold text-slate-800">Note:</span> “{it.note}”
+                        </div>
+                      ) : null}
                     </div>
 
                     {typeof it.lineTotalCents === "number" ? (
@@ -373,30 +330,25 @@ export default function WaiterHomePage() {
             })}
           </div>
 
-          {/* Actions */}
-          {tab === "pending" ? (
+          {orderTab === "pending" ? (
             <div className="mt-3 flex gap-2">
               <button
-                disabled={accepting || rejecting || loggingOut}
+                disabled={accepting || rejecting}
                 onClick={() => accept((o as any).orderId)}
                 className={cn(
                   "inline-flex flex-1 items-center justify-center rounded-2xl px-3 py-2 text-sm font-extrabold tracking-tight shadow-sm",
-                  accepting || rejecting || loggingOut
-                    ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                    : "bg-slate-900 text-white hover:bg-slate-800"
+                  accepting || rejecting ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-slate-900 text-white hover:bg-slate-800"
                 )}
               >
                 {accepting ? "Working..." : "Accept"}
               </button>
 
               <button
-                disabled={accepting || rejecting || loggingOut}
+                disabled={accepting || rejecting}
                 onClick={() => reject((o as any).orderId)}
                 className={cn(
                   "inline-flex flex-1 items-center justify-center rounded-2xl border px-3 py-2 text-sm font-extrabold tracking-tight shadow-sm",
-                  accepting || rejecting || loggingOut
-                    ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                    : "bg-white text-slate-800 hover:bg-slate-50"
+                  accepting || rejecting ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-white text-slate-800 hover:bg-slate-50"
                 )}
               >
                 {rejecting ? "Working..." : "Reject"}
@@ -404,16 +356,14 @@ export default function WaiterHomePage() {
             </div>
           ) : null}
 
-          {tab === "ready_to_service" ? (
+          {orderTab === "ready_to_service" ? (
             <div className="mt-3">
               <button
-                disabled={serving || loggingOut}
+                disabled={serving}
                 onClick={() => markServed((o as any).orderId)}
                 className={cn(
                   "inline-flex w-full items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm font-extrabold tracking-tight shadow-sm",
-                  serving || loggingOut
-                    ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                    : "bg-slate-600 text-white hover:bg-emerald-500"
+                  serving ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-slate-600 text-white hover:bg-emerald-500"
                 )}
               >
                 <BadgeCheck className="h-4 w-4" />
@@ -427,76 +377,43 @@ export default function WaiterHomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <div className="sticky top-0 z-30 border-b border-slate-100 bg-slate-900">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="text-lg font-extrabold tracking-tight text-[#E2B13C]">Waiter Dashboard</div>
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold",
-                connected ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"
-              )}
-              title="Realtime connection"
-            >
-              {connected ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-              {connected ? "Online" : "Offline"}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onLogout}
-              disabled={loggingOut}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-extrabold tracking-tight shadow-sm",
-                loggingOut ? "bg-rose-500 text-slate-400 cursor-not-allowed" : "bg-rose-600 text-white hover:bg-rose-500"
-              )}
-              title="Logout"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </button>
-          </div>
-        </div>
-
-        {/* Tabs */}
+    <>
+      {/* Sub tabs for orders */}
+      <div className="sticky top-[57px] z-20 bg-slate-900">
         <div className="mx-auto max-w-3xl px-2 overflow-x-auto">
           <div className="flex flex-nowrap items-stretch gap-1 border-b border-slate-200 whitespace-nowrap">
-            <button onClick={() => setTab("pending")} className={tabBtnClass(tab === "pending")}>
-              Pending <span className={badgeClass(tab === "pending")}>{counts.pending}</span>
-              <span className={underlineClass(tab === "pending")} />
+            <button onClick={() => setOrderTab("pending")} className={tabBtnClass(orderTab === "pending")}>
+              Pending <span className={badgeClass(orderTab === "pending")}>{orderCounts.pending}</span>
+              <span className={underlineClass(orderTab === "pending")} />
             </button>
 
-            <button onClick={() => setTab("accepted")} className={tabBtnClass(tab === "accepted")}>
-              Accepted <span className={badgeClass(tab === "accepted")}>{counts.accepted}</span>
-              <span className={underlineClass(tab === "accepted")} />
+            <button onClick={() => setOrderTab("accepted")} className={tabBtnClass(orderTab === "accepted")}>
+              Accepted <span className={badgeClass(orderTab === "accepted")}>{orderCounts.accepted}</span>
+              <span className={underlineClass(orderTab === "accepted")} />
             </button>
 
-            <button onClick={() => setTab("rejected")} className={tabBtnClass(tab === "rejected")}>
-              Rejected <span className={badgeClass(tab === "rejected")}>{counts.rejected}</span>
-              <span className={underlineClass(tab === "rejected")} />
+            <button onClick={() => setOrderTab("rejected")} className={tabBtnClass(orderTab === "rejected")}>
+              Rejected <span className={badgeClass(orderTab === "rejected")}>{orderCounts.rejected}</span>
+              <span className={underlineClass(orderTab === "rejected")} />
             </button>
 
-            <button onClick={() => setTab("kitchen")} className={tabBtnClass(tab === "kitchen")}>
-              In kitchen <span className={badgeClass(tab === "kitchen")}>{counts.kitchen}</span>
-              <span className={underlineClass(tab === "kitchen")} />
+            <button onClick={() => setOrderTab("kitchen")} className={tabBtnClass(orderTab === "kitchen")}>
+              In kitchen <span className={badgeClass(orderTab === "kitchen")}>{orderCounts.kitchen}</span>
+              <span className={underlineClass(orderTab === "kitchen")} />
             </button>
 
-            <button onClick={() => setTab("ready_to_service")} className={tabBtnClass(tab === "ready_to_service")}>
-              Ready to Serve <span className={badgeClass(tab === "ready_to_service")}>{counts.ready}</span>
-              <span className={underlineClass(tab === "ready_to_service")} />
+            <button onClick={() => setOrderTab("ready_to_service")} className={tabBtnClass(orderTab === "ready_to_service")}>
+              Ready to Serve <span className={badgeClass(orderTab === "ready_to_service")}>{orderCounts.ready_to_service}</span>
+              <span className={underlineClass(orderTab === "ready_to_service")} />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Body */}
       <div className="mx-auto max-w-3xl px-4 pb-10 pt-4">
-        {listErr ? (
+        {ordersErr ? (
           <div className="mb-3 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-            {listErr}
+            {ordersErr}
           </div>
         ) : null}
 
@@ -506,18 +423,18 @@ export default function WaiterHomePage() {
           </div>
         ) : null}
 
-        {loadingList ? (
+        {loadingOrders ? (
           <div className="rounded-2xl border bg-white p-6 text-sm text-slate-600 shadow-sm">Loading...</div>
-        ) : list.length === 0 ? (
+        ) : orderList.length === 0 ? (
           <div className="rounded-2xl border bg-white p-6 text-sm text-slate-600 shadow-sm">No orders in this tab.</div>
         ) : (
           <div className="space-y-3">
-            {list.map((o: any) => (
+            {orderList.map((o: any) => (
               <OrderCard key={o.orderId} o={o} />
             ))}
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }
