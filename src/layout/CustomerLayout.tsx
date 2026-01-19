@@ -1,4 +1,4 @@
-import { Outlet, Link, useLocation, useSearchParams } from "react-router-dom";
+import { Outlet, Link, useLocation, useSearchParams, useNavigate } from "react-router-dom";
 import { cn } from "../utils/cn";
 import { cartCount, useCartStore } from "../store/cart.store";
 import { 
@@ -7,12 +7,23 @@ import {
   ClipboardList, 
   User, 
 } from "lucide-react";
+import { useAuth } from "../auth/useAuth";
+import { useEffect } from "react";
 
 export default function CustomerLayout() {
+  const nav = useNavigate();
+  const { user } = useAuth();
   const loc = useLocation();
   const [sp] = useSearchParams();
-  const table = sp.get("table") || "";
-  const token = sp.get("token") || "";
+  
+  const tableFromUrl = sp.get("table") || "";
+  const tokenFromUrl = sp.get("token") || "";
+
+  const savedRaw = localStorage.getItem("customer_ctx");
+  const saved = savedRaw ? JSON.parse(savedRaw) as { table?: string; token?: string } : {};
+
+  const table = tableFromUrl || saved.table || "";
+  const token = tokenFromUrl || saved.token || "";
 
   const lines = useCartStore((s) => s.lines);
   const n = cartCount(lines);
@@ -25,6 +36,24 @@ export default function CustomerLayout() {
     { path: "/orders", label: "Orders", icon: ClipboardList },
     { path: "/profile", label: "Profile", icon: User },
   ];
+
+  function onProfileClick(e?: React.MouseEvent) {
+    e?.preventDefault();
+
+    if (user) {
+      nav("/profile${q}");
+      return;
+    }
+
+    const returnTo = loc.pathname + loc.search;
+    nav(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+  }
+
+  useEffect(() => {
+    if (tableFromUrl && tokenFromUrl) {
+      localStorage.setItem("customer_ctx", JSON.stringify({ table: tableFromUrl, token: tokenFromUrl }));
+    }
+  }, [tableFromUrl, tokenFromUrl]);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row font-sans text-slate-900">
@@ -45,17 +74,16 @@ export default function CustomerLayout() {
             {navItems.map((item) => {
               const isActive = loc.pathname === item.path;
               const Icon = item.icon;
-              return (
-                <Link 
-                  key={item.path} 
-                  to={`${item.path}${item.path === '/profile' ? '' : q}`}
-                  className={cn(
-                    "flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group",
-                    isActive 
-                      ? "bg-[#E2B13C] text-[#0F172A] shadow-lg shadow-[#E2B13C]/20" 
-                      : "text-slate-400 hover:bg-white/5 hover:text-white"
-                  )}
-                >
+
+              const commonCls = cn(
+                "w-full text-left flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group",
+                isActive
+                  ? "bg-[#E2B13C] text-[#0F172A] shadow-lg shadow-[#E2B13C]/20"
+                  : "text-slate-400 hover:bg-white/5 hover:text-white"
+              );
+
+              const content = (
+                <>
                   <Icon className={cn("w-5 h-5", isActive ? "text-[#0F172A]" : "group-hover:text-[#E2B13C]")} />
                   <span className="flex-1 font-bold text-sm tracking-wide">{item.label}</span>
                   {item.badge !== undefined && item.badge > 0 && (
@@ -66,6 +94,29 @@ export default function CustomerLayout() {
                       {item.badge}
                     </span>
                   )}
+                </>
+              );
+
+              if (item.path === "/profile") {
+                return (
+                  <button
+                    key={item.path}
+                    type="button"
+                    onClick={onProfileClick}
+                    className={commonCls}
+                  >
+                    {content}
+                  </button>
+                );
+              }
+
+              return (
+                <Link
+                  key={item.path}
+                  to={`${item.path}${q}`}
+                  className={commonCls}
+                >
+                  {content}
                 </Link>
               );
             })}
@@ -91,15 +142,14 @@ export default function CustomerLayout() {
           {navItems.map((item) => {
             const isActive = loc.pathname === item.path;
             const Icon = item.icon;
-            return (
-              <Link 
-                key={item.path} 
-                to={`${item.path}${item.path === '/profile' ? '' : q}`}
-                className={cn(
-                  "flex flex-col items-center justify-center transition-all duration-300 relative px-4 py-1",
-                  isActive ? "text-[#E2B13C]" : "text-slate-500"
-                )}
-              >
+
+            const cls = cn(
+              "flex flex-col items-center justify-center transition-all duration-300 relative px-4 py-1",
+              isActive ? "text-[#E2B13C]" : "text-slate-500"
+            );
+
+            const content = (
+              <>
                 <div className="relative">
                   <Icon className={cn("w-5 h-5", isActive && "scale-110")} strokeWidth={isActive ? 2.5 : 2} />
                   {item.badge !== undefined && item.badge > 0 && (
@@ -117,6 +167,20 @@ export default function CustomerLayout() {
                 {isActive && (
                   <div className="absolute -bottom-1 w-1 h-1 bg-[#E2B13C] rounded-full shadow-[0_0_8px_#E2B13C]" />
                 )}
+              </>
+            );
+
+            if (item.path === "/profile") {
+              return (
+                <button key={item.path} type="button" onClick={onProfileClick} className={cls}>
+                  {content}
+                </button>
+              );
+            }
+
+            return (
+              <Link key={item.path} to={`${item.path}${q}`} className={cls}>
+                {content}
               </Link>
             );
           })}

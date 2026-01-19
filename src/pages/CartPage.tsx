@@ -61,6 +61,8 @@ export default function CartPage() {
     !token;
 
   async function placeOrder() {
+    if (disabled) return;
+
     try {
       setPlaceErr(null);
 
@@ -72,14 +74,29 @@ export default function CartPage() {
 
       setPlacing(true);
 
-      await updateDraftItemsApi({
-        orderId,
-        table,
-        token,
-        items: payloadItems,
-      });
+      // Step 1: sync draft items
+      try {
+        await updateDraftItemsApi({
+          orderId,
+          table,
+          token,
+          items: payloadItems,
+        });
+      } catch (e: any) {
+        throw new Error(e?.message ? `Update draft failed: ${e.message}` : "Update draft failed");
+      }
 
-      await submitOrderApi({ orderId, table, token, orderNote });
+      // Step 2: submit
+      try {
+        await submitOrderApi({
+          orderId,
+          table,
+          token,
+          orderNote: orderNote || "",
+        });
+      } catch (e: any) {
+        throw new Error(e?.message ? `Submit failed: ${e.message}` : "Submit failed");
+      }
 
       clearCart();
       clearStoredOrderId(table);
@@ -107,7 +124,9 @@ export default function CartPage() {
                     <AlertCircle className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-extrabold text-slate-900">Cannot open session</div>
+                    <div className="text-sm font-extrabold text-slate-900">
+                      Cannot open session
+                    </div>
                     <div className="mt-1 text-sm text-rose-600">{orderErr}</div>
                   </div>
                 </div>
@@ -151,7 +170,11 @@ export default function CartPage() {
                         {/* Image */}
                         <div className="h-20 w-24 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
                           {x.photoUrl ? (
-                            <img src={x.photoUrl} className="h-full w-full object-cover" />
+                            <img
+                              src={x.photoUrl}
+                              className="h-full w-full object-cover"
+                              alt={x.name}
+                            />
                           ) : (
                             <div className="flex h-full items-center justify-center text-slate-400">
                               <ImageIcon className="h-6 w-6 opacity-40" />
@@ -175,7 +198,9 @@ export default function CartPage() {
                                       <span className="font-semibold text-slate-700">
                                         {m.groupName}:
                                       </span>{" "}
-                                      <span className="text-slate-600">{m.optionNames.join(", ")}</span>
+                                      <span className="text-slate-600">
+                                        {m.optionNames.join(", ")}
+                                      </span>
                                     </div>
                                   ))}
                                 </div>
@@ -183,10 +208,8 @@ export default function CartPage() {
 
                               {x.note ? (
                                 <div className="mt-1 truncate text-xs text-slate-500">
-                                  <span className="font-semibold text-slate-700">
-                                    Note:
-                                  </span>
-                                  {" "}“{x.note}”
+                                  <span className="font-semibold text-slate-700">Note:</span>{" "}
+                                  “{x.note}”
                                 </div>
                               ) : null}
                             </div>
@@ -291,18 +314,24 @@ export default function CartPage() {
 
                   <div className="flex items-center justify-between">
                     <span className="text-slate-600">Service fee</span>
-                    <span className="font-semibold text-slate-900">{formatMoneyFromCents(0)}</span>
+                    <span className="font-semibold text-slate-900">
+                      {formatMoneyFromCents(0)}
+                    </span>
                   </div>
 
                   <div className="my-3 h-px bg-slate-100" />
 
                   <div className="flex items-center justify-between text-base font-extrabold">
                     <span className="text-slate-900">Total</span>
-                    <span className="text-emerald-700">{formatMoneyFromCents(subtotal)}</span>
+                    <span className="text-emerald-700">
+                      {formatMoneyFromCents(subtotal)}
+                    </span>
                   </div>
                 </div>
 
-                {placeErr ? <div className="mt-3 text-sm font-medium text-rose-600">{placeErr}</div> : null}
+                {placeErr ? (
+                  <div className="mt-3 text-sm font-medium text-rose-600">{placeErr}</div>
+                ) : null}
 
                 <button
                   disabled={disabled}
@@ -350,19 +379,25 @@ export default function CartPage() {
           <div className="mt-4 space-y-2 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-slate-600">Subtotal</span>
-              <span className="font-semibold text-slate-900">{formatMoneyFromCents(subtotal)}</span>
+              <span className="font-semibold text-slate-900">
+                {formatMoneyFromCents(subtotal)}
+              </span>
             </div>
 
             <div className="flex items-center justify-between">
               <span className="text-slate-600">Service fee</span>
-              <span className="font-semibold text-slate-900">{formatMoneyFromCents(0)}</span>
+              <span className="font-semibold text-slate-900">
+                {formatMoneyFromCents(0)}
+              </span>
             </div>
 
             <div className="my-3 h-px bg-slate-100" />
 
             <div className="flex items-center justify-between text-base font-extrabold">
               <span className="text-slate-900">Total</span>
-              <span className="text-emerald-700">{formatMoneyFromCents(subtotal)}</span>
+              <span className="text-emerald-700">
+                {formatMoneyFromCents(subtotal)}
+              </span>
             </div>
           </div>
 

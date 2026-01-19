@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { usePublicMenu } from "../hooks/usePublicMenu";
 import { cn } from "../utils/cn";
@@ -21,6 +21,8 @@ import {
 
 type Sel = Record<string, string[]>;
 
+type VError = { groupId: string; message: string } | null;
+
 function sumAdj(item: any, sel: Sel) {
   let s = 0;
   for (const g of item.modifierGroups ?? []) {
@@ -32,15 +34,15 @@ function sumAdj(item: any, sel: Sel) {
   return s;
 }
 
-function validate(item: any, sel: Sel): string | null {
+function validate(item: any, sel: Sel): VError {
   for (const g of item.modifierGroups ?? []) {
     const chosen = sel[g._id] ?? [];
     const count = chosen.length;
 
-    if (g.isRequired && count === 0) return `Please choose ${g.name}`;
-    if (g.selectionType === "single" && count > 1) return `${g.name} choose only one`;
-    if (g.minSelections && count < g.minSelections) return `${g.name} choose at least ${g.minSelections}`;
-    if (g.maxSelections && count > g.maxSelections) return `${g.name} choose a maximum of ${g.maxSelections}`;
+    if (g.isRequired && count === 0) return { groupId: g._id, message: `Please choose ${g.name}` };
+    if (g.selectionType === "single" && count > 1) return { groupId: g._id, message: `${g.name} choose only one` };
+    if (g.minSelections && count < g.minSelections) return { groupId: g._id, message: `${g.name} choose at least ${g.minSelections}` };
+    if (g.maxSelections && count > g.maxSelections) return { groupId: g._id, message: `${g.name} choose a maximum of ${g.maxSelections}` };
   }
   return null;
 }
@@ -57,10 +59,29 @@ export default function ItemDetailPage() {
 
   const item = useMemo(() => data?.items?.find((x) => x._id === id) ?? null, [data, id]);
 
+  const qstr = `?table=${encodeURIComponent(table)}&token=${encodeURIComponent(token)}`;
+
+  const related = useMemo(() => {
+    const xs = data?.items ?? [];
+    if (!item) return [];
+    return xs
+      .filter((x) => x._id !== item._id && x.categoryId === item.categoryId)
+      .sort((a: any, b: any) => {
+        const sa = a.status === "available" ? 0 : 1;
+        const sb = b.status === "available" ? 0 : 1;
+        if (sa !== sb) return sa - sb;
+        return (b.ratingAvg || 0) - (a.ratingAvg || 0);
+      })
+      .slice(0, 10);
+  }, [data?.items, item?._id, item?.categoryId]);
+
   const [qty, setQty] = useState(1);
   const [note, setNote] = useState("");
   const [sel, setSel] = useState<Sel>({});
-  const [vErr, setVErr] = useState<string | null>(null);
+  const [vErr, setVErr] = useState<VError>(null);
+  const [flashGroupId, setFlashGroupId] = useState<string | null>(null);
+
+  const groupRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const photos = useMemo(() => {
     const xs = (item?.photos ?? [])
@@ -77,11 +98,18 @@ export default function ItemDetailPage() {
 
   const [imgIdx, setImgIdx] = useState(0);
 
+  // reset state when item changes
   useEffect(() => {
+    setQty(1);
+    setNote("");
+    setSel({});
+    setVErr(null);
+    setFlashGroupId(null);
     setImgIdx(0);
   }, [item?._id]);
 
   if (loading) return <div className="p-6">Loading...</div>;
+
   if (err || !data || !item) {
     return (
       <div className="min-h-screen bg-slate-50 p-6">
@@ -101,7 +129,7 @@ export default function ItemDetailPage() {
   const img = photos[safeIdx]?.url || imgPrimary;
 
   const unavailable = item.status === "unavailable";
-  const disabled =  unavailable;
+  const disabled = unavailable;
 
   const adj = sumAdj(item, sel);
   const unit = item.priceCents + adj;
@@ -117,10 +145,14 @@ export default function ItemDetailPage() {
       else cur.add(optionId);
       return { ...prev, [groupId]: [...cur] };
     });
+
+    // nếu đang báo lỗi đúng group này thì clear nhẹ khi user thao tác
+    setVErr((prev) => (prev?.groupId === groupId ? null : prev));
+    setFlashGroupId(null);
   }
 
   function buildMods() {
-    const mods = (item?.modifierGroups ?? [])
+    return (item?.modifierGroups ?? [])
       .map((g: any) => {
         const chosen = new Set(sel[g._id] ?? []);
         const ops = (g.options ?? []).filter((o: any) => chosen.has(o._id));
@@ -133,8 +165,6 @@ export default function ItemDetailPage() {
         };
       })
       .filter((m: any) => m.optionIds.length > 0);
-
-    return mods;
   }
 
   function makeKey() {
@@ -144,13 +174,23 @@ export default function ItemDetailPage() {
     return `${item?._id}::${JSON.stringify(normalized)}::${note.trim()}`;
   }
 
+  function scrollToGroup(groupId: string) {
+    const el = groupRefs.current[groupId];
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setFlashGroupId(groupId);
+    window.setTimeout(() => setFlashGroupId(null), 900);
+  }
+
   function onAdd() {
-    const msg = validate(item, sel);
-    if (msg) {
-      setVErr(msg);
+    const v = validate(item, sel);
+    if (v) {
+      setVErr(v);
+      scrollToGroup(v.groupId);
       return;
     }
+
     setVErr(null);
+    setFlashGroupId(null);
 
     const mods = buildMods();
     const key = makeKey();
@@ -184,31 +224,28 @@ export default function ItemDetailPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Top bar */}
-      <div className="sticky top-0 z-30 border-b border-slate-100 bg-white/85 backdrop-blur">
+      <div className="sticky top-0 z-30 border-b border-slate-100 bg-slate-900">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <button
             onClick={() => nav(-1)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 active:scale-[0.99]"
+            className="inline-flex items-center gap-2 rounded-2xl bg-white/15 text-[#E2B13C] px-3 py-2 text-sm font-medium shadow-sm hover:bg-slate-700 active:scale-[0.99]"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back
+            <ArrowLeft className="h-5 w-5" />
           </button>
 
-          <div className="text-sm font-semibold text-slate-900">
-            Table {tableNumber}
-          </div>
+          <h1 className="text-[#E2B13C] text-lg font-semibold">Item Details</h1>
 
-          <div className="w-[84px]" />
+          <div className="text-sm font-semibold text-[#E2B13C]">Table {tableNumber}</div>
         </div>
       </div>
 
       {/* Content */}
       <div className="mx-auto max-w-6xl px-4 pb-28 pt-4 lg:pb-10">
         <div className="grid gap-4 lg:grid-cols-2 lg:gap-8">
-          {/* Left: Image + quick summary */}
+          {/* Left */}
           <div className="lg:sticky lg:top-[76px] lg:self-start">
             <div className="overflow-hidden rounded-[28px] border border-slate-100 bg-white shadow-sm">
-              <div className="relative aspect-[16/11] w-full bg-black">
+              <div className="relative aspect-[16/11] w-full bg-gray-100">
                 {img ? (
                   <img src={img} className="h-full w-full object-contain" />
                 ) : (
@@ -263,51 +300,49 @@ export default function ItemDetailPage() {
                                 key={i}
                                 className={cn(
                                   "h-3.5 w-3.5",
-                                  i < stars ? "fill-slate-900 text-slate-900" : "text-slate-300"
+                                  i < stars ? "fill-[#E2B13C] text-orange-500" : "text-slate-300"
                                 )}
                               />
                             ))}
                           </span>
-                          <span className="font-semibold">{(item.ratingAvg || 0).toFixed(1)}</span>
+                          <span className="font-semibold text-orange-500">{(item.ratingAvg || 0).toFixed(1)}</span>
                         </span>
-                        <span className="text-slate-500">({item.ratingCount || 0} reviews)</span>
-                      </div>
-
-                      <div className="inline-flex items-center gap-1 ml-2">
-                        <Clock className="h-4 w-4" />
-                        <span>{item.prepTimeMinutes ? `${item.prepTimeMinutes} mins prep` : "Prep time"}</span>
+                        <span className="text-orange-500">({item.ratingCount || 0} reviews)</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="shrink-0 text-lg font-extrabold text-slate-800">
-                    {formatMoneyFromCents(item.priceCents)}
+                  <div className="shrink-0 text-lg font-extrabold text-slate-800">{formatMoneyFromCents(item.priceCents)}</div>
+                </div>
+
+                <div className="mt-1 flex items-center">
+                  <div className="inline-flex items-center gap-1 mr-2">
+                    <Clock className="h-3.5 w-3.5" />
+                    <span className="text-sm">{item.prepTimeMinutes ? `Prep time: ~${item.prepTimeMinutes} mins` : "Prep time"}</span>
+                  </div>
+
+                  <div className="text-sm">
+                    {item.status === "available" ? (
+                      <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-700 text-xs">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        Available
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1 font-medium text-rose-700 text-xs">
+                        <span className="h-2 w-2 rounded-full bg-rose-500" />
+                        Sold out
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 {item.description ? (
-                  <div className="mt-3 text-sm leading-relaxed text-slate-600 whitespace-pre-line">
-                    {item.description}
-                  </div>
+                  <div className="mt-3 text-sm leading-relaxed text-slate-600 whitespace-pre-line">{item.description}</div>
                 ) : null}
-
-                <div className="mt-3 text-sm">
-                  {item.status === "available" ? (
-                    <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-700">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                      Available
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1 font-medium text-rose-700">
-                      <span className="h-2 w-2 rounded-full bg-rose-500" />
-                      Sold out
-                    </span>
-                  )}
-                </div>
               </div>
             </div>
 
-            {/* Desktop bottom actions block */}
+            {/* Desktop bottom actions */}
             <div className="mt-4 hidden lg:block">
               <div className="rounded-[28px] border border-slate-100 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between">
@@ -338,20 +373,16 @@ export default function ItemDetailPage() {
                   onClick={onAdd}
                   className={cn(
                     "mt-4 w-full rounded-2xl px-4 py-3 text-sm font-extrabold tracking-tight shadow-sm",
-                    disabled
-                      ? "bg-slate-100 text-slate-400"
-                      : "bg-slate-800 text-[#E2B13C] hover:bg-slate-700 active:scale-[0.99]"
+                    disabled ? "bg-slate-100 text-slate-400" : "bg-slate-800 text-[#E2B13C] hover:bg-slate-700 active:scale-[0.99]"
                   )}
                 >
                   Add to cart • {formatMoneyFromCents(total)}
                 </button>
-
-                {vErr ? <div className="mt-3 text-sm font-medium text-rose-600">{vErr}</div> : null}
               </div>
             </div>
           </div>
 
-          {/* Right: Modifiers + Note + Reviews */}
+          {/* Right */}
           <div className="space-y-4">
             {/* Modifiers */}
             <div className="rounded-[28px] border border-slate-100 bg-white p-4 shadow-sm">
@@ -362,8 +393,19 @@ export default function ItemDetailPage() {
               <div className="mt-4 space-y-5">
                 {(item.modifierGroups ?? []).map((g: any) => {
                   const chosen = new Set(sel[g._id] ?? []);
+                  const groupHasError = vErr?.groupId === g._id;
+
                   return (
-                    <div key={g._id} className="rounded-2xl border border-slate-100 p-3">
+                    <div
+                      key={g._id}
+                      ref={(el) => {
+                        groupRefs.current[g._id] = el;
+                      }}
+                      className={cn(
+                        "scroll-mt-24 rounded-2xl border p-3 transition",
+                        flashGroupId === g._id ? "border-rose-300 ring-4 ring-rose-100" : "border-slate-100"
+                      )}
+                    >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-sm font-bold text-slate-900">
                           {g.name}{" "}
@@ -374,6 +416,10 @@ export default function ItemDetailPage() {
                           {g.selectionType === "single" ? "Pick one" : "Optional add-on"}
                         </div>
                       </div>
+
+                      {groupHasError ? (
+                        <div className="mt-2 text-sm font-medium text-rose-600">{vErr?.message}</div>
+                      ) : null}
 
                       <div className="mt-3 space-y-2">
                         {(g.options ?? []).map((op: any) => {
@@ -390,9 +436,7 @@ export default function ItemDetailPage() {
                               <span
                                 className={cn(
                                   "grid h-5 w-5 place-items-center rounded-md border",
-                                  isOn
-                                    ? "border-emerald-600 bg-emerald-50 text-emerald-700"
-                                    : "border-slate-300 text-slate-300"
+                                  isOn ? "border-emerald-600 bg-emerald-50 text-emerald-700" : "border-slate-300 text-slate-300"
                                 )}
                               >
                                 <Check className="h-4 w-4" />
@@ -427,7 +471,10 @@ export default function ItemDetailPage() {
                 })}
               </div>
 
-              {vErr ? <div className="mt-4 text-sm font-medium text-rose-600">{vErr}</div> : null}
+              {/* fallback lỗi (nếu cần) */}
+              {vErr && !item.modifierGroups?.some((g: any) => g._id === vErr.groupId) ? (
+                <div className="mt-4 text-sm font-medium text-rose-600">{vErr.message}</div>
+              ) : null}
             </div>
 
             {/* Note */}
@@ -441,6 +488,66 @@ export default function ItemDetailPage() {
                 rows={3}
               />
             </div>
+
+            {/* Related items */}
+            {related.length > 0 && (
+              <div className="rounded-[28px] border border-slate-100 bg-white p-4 shadow-sm">
+                <div className="flex items-end justify-between">
+                  <div className="text-base font-extrabold tracking-tight text-slate-900">Related items</div>
+                </div>
+
+                <div className="mt-4 flex gap-3 overflow-x-auto no-scrollbar pb-1 snap-x snap-mandatory">
+                  {related.map((rit: any) => {
+                    const rimg = rit.photos?.find((p: any) => p.isPrimary)?.url || rit.photos?.[0]?.url;
+
+                    return (
+                      <button
+                        key={rit._id}
+                        type="button"
+                        onClick={() => {
+                          nav(`/menu/item/${rit._id}${qstr}`);
+                          window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                        className="group w-[180px] shrink-0 snap-start overflow-hidden rounded-2xl border border-slate-100 bg-white text-left shadow-sm transition hover:border-[#E2B13C]/40 hover:shadow-md active:scale-[0.99]"
+                      >
+                        <div className="relative h-28 w-full bg-slate-100">
+                          {rimg ? (
+                            <img
+                              src={rimg}
+                              alt={rit.name}
+                              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center text-slate-300">
+                              <ImageIcon className="h-8 w-8 opacity-50" />
+                            </div>
+                          )}
+
+                          {rit.status !== "available" && (
+                            <div className="absolute left-2 top-2 rounded-full bg-rose-600/90 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white">
+                              Sold out
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="p-3">
+                          <div className="truncate text-sm font-extrabold text-slate-900">{rit.name}</div>
+
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <div className="text-sm font-black text-slate-800">{formatMoneyFromCents(rit.priceCents)}</div>
+
+                            <div className="flex items-center gap-1 text-xs font-bold text-slate-600">
+                              <Star className="h-3.5 w-3.5 fill-[#E2B13C] text-[#E2B13C]" />
+                              {(rit.ratingAvg || 0).toFixed(1)}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Reviews */}
             <div className="rounded-[28px] border border-slate-100 bg-white p-4 shadow-sm">

@@ -22,16 +22,42 @@ export type StaffOrder = {
   prepTimeMinutes: number;
 };
 
+export type PagedOrdersRes = {
+  ok: true;
+  total: number;
+  page: number;
+  limit: number;
+  orders: StaffOrder[];
+};
+
 function errMsg(e: any) {
   return e?.response?.data?.message || e?.message || "Request failed";
 }
 
-export async function listStaffOrdersApi(args: { status: string; signal?: AbortSignal }) {
+export async function listStaffOrdersApi(args: {
+  status?: string; // all | pending | accepted | ...
+  q?: string; // search table / note / item name
+  datePreset?: "today" | "yesterday" | "this_week" | "this_month";
+  from?: string; // ISO
+  to?: string;   // ISO
+  page?: number;
+  limit?: number;
+  signal?: AbortSignal;
+}) {
   try {
-    const res = await api.get<StaffOrder[]>("/staff/orders", {
-      params: { status: args.status },
+    const res = await api.get<PagedOrdersRes>("/staff/orders", {
+      params: {
+        ...(args.status && args.status !== "all" ? { status: args.status } : {}),
+        ...(args.q ? { q: args.q } : {}),
+        ...(args.datePreset ? { datePreset: args.datePreset } : {}),
+        ...(args.from ? { from: args.from } : {}),
+        ...(args.to ? { to: args.to } : {}),
+        ...(args.page ? { page: args.page } : {}),
+        ...(args.limit ? { limit: args.limit } : {}),
+      },
       signal: args.signal,
     });
+
     return res.data;
   } catch (e: any) {
     throw new Error(errMsg(e));

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getPublicMenuApi, type PublicMenuResponse } from "../api/public.menu";
+import { openTableSessionApi } from "../api/public.session";
 
 function cacheKey(table: string, token: string) {
   return `sr.publicMenu.${table}.${token.slice(0, 16)}`;
@@ -18,8 +19,11 @@ export function usePublicMenu(table: string, token: string) {
         setLoading(true);
         setErr(null);
 
-        if (!table || !token) throw new Error("QR invalid (invalid table/token).");
+        if (!table || !token) {
+          throw new Error("QR invalid (invalid table/token).");
+        }
 
+        await openTableSessionApi({ table, token });
         const ck = cacheKey(table, token);
         const cached = sessionStorage.getItem(ck);
         if (cached) {
@@ -33,7 +37,9 @@ export function usePublicMenu(table: string, token: string) {
         setData(res);
         sessionStorage.setItem(ck, JSON.stringify(res));
       } catch (e: any) {
-        if (!cancelled) setErr(e?.message || "Unable to load menu.");
+        if (!cancelled) {
+          setErr(e?.message || "Unable to load menu.");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

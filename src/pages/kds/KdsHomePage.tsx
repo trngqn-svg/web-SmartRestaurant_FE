@@ -104,13 +104,17 @@ export default function KdsHomePage() {
       setErr(null);
       setLoading(true);
 
-      const [accepted, preparing, ready] = await Promise.all([
-        listStaffOrdersApi({ status: "accepted" }),
-        listStaffOrdersApi({ status: "preparing" }),
-        listStaffOrdersApi({ status: "ready" }),
+      const [acceptedRes, preparingRes, readyRes] = await Promise.all([
+        listStaffOrdersApi({ status: "accepted", page: 1, limit: 50 }),
+        listStaffOrdersApi({ status: "preparing", page: 1, limit: 50 }),
+        listStaffOrdersApi({ status: "ready", page: 1, limit: 50 }),
       ]);
 
-      const merged: StaffOrder[] = [...accepted, ...preparing, ...ready];
+      const merged: StaffOrder[] = [
+        ...(acceptedRes.orders ?? []),
+        ...(preparingRes.orders ?? []),
+        ...(readyRes.orders ?? []),
+      ];
 
       merged.sort((a, b) => {
         const ta = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
@@ -125,10 +129,10 @@ export default function KdsHomePage() {
           tableNumber: o.tableNumber,
           totalCents: o.totalCents,
           submittedAt: o.submittedAt,
-          orderNote: (o as any).orderNote,
-          status: String(o.status || "").toLowerCase(),
+          orderNote: (o as any).orderNote, // hoặc o.orderNote nếu backend trả đúng
+          status: String(o.status || "").toLowerCase() as any,
           items: o.items ?? [],
-          prepTimeMinutes: (o as any).prepTimeMinutes,
+          prepTimeMinutes: (o as any).prepTimeMinutes ?? o.prepTimeMinutes ?? 1,
         }))
       );
     } catch (e: any) {
@@ -308,7 +312,7 @@ export default function KdsHomePage() {
         );
 
         const mins = getLinePrepMinutes(order, li);
-        await sleep(mins * 60_000, signal);
+        await sleep(mins * 2_000, signal);
 
         await readyLineApi(orderId, li.lineId);
 
@@ -554,7 +558,7 @@ export default function KdsHomePage() {
                       visibleLines.map((li) => {
                         const lst = String(li.status || "queued").toLowerCase();
                         const mins = getLinePrepMinutes(o, li);
-                        const durationMs = mins * 60_000;
+                        const durationMs = mins * 2_000;
 
                         const k = lineKey(o.orderId, li.lineId);
                         const startedAt = lineStartRef.current[k];

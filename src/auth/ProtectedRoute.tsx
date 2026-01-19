@@ -19,7 +19,9 @@ export default function ProtectedRoute({
   if (loading) return null;
 
   if (!user) {
-    return <Navigate to={redirectTo} replace state={{ from: location }} />;
+    const returnTo = location.pathname + location.search;
+    const to = `${redirectTo}?returnTo=${encodeURIComponent(returnTo)}`;
+    return <Navigate to={to} replace />;
   }
 
   if (roles && roles.length > 0) {
