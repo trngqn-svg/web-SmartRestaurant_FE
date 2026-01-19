@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { UtensilsCrossed, Loader2, CheckCircle2 } from "lucide-react";
 import { registerApi } from "../api/auth";
+import { message } from "antd";
 
 type FormValues = {
   fullName?: string;
@@ -11,6 +12,12 @@ type FormValues = {
   confirmPassword: string;
   agree: boolean;
 };
+
+function getErrorMessage(e: any) {
+  const msg = e?.response?.data?.message ?? e?.message ?? "Register failed";
+  if (Array.isArray(msg)) return msg.join(", ");
+  return String(msg);
+}
 
 function SuccessModal({ open, onOk }: { open: boolean; onOk: () => void }) {
   if (!open) return null;
@@ -39,7 +46,9 @@ function SuccessModal({ open, onOk }: { open: boolean; onOk: () => void }) {
 
 export default function RegisterPage() {
   const nav = useNavigate();
-  const [serverError, setServerError] = useState<string | null>(null);
+  const [sp] = useSearchParams();
+  const returnTo = sp.get("returnTo");
+
   const [submitting, setSubmitting] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
 
@@ -62,7 +71,6 @@ export default function RegisterPage() {
   const password = watch("password");
 
   const onSubmit = async (values: FormValues) => {
-    setServerError(null);
     setSubmitting(true);
     try {
       await registerApi({
@@ -72,7 +80,7 @@ export default function RegisterPage() {
       });
       setSuccessOpen(true);
     } catch (e: any) {
-      setServerError(e?.response?.data?.message ?? e?.message ?? "Register failed");
+      message.error(getErrorMessage(e)); 
     } finally {
       setSubmitting(false);
     }
@@ -80,7 +88,12 @@ export default function RegisterPage() {
 
   function handleOk() {
     setSuccessOpen(false);
-    nav("/login", { replace: true });
+
+    if (returnTo) {
+      nav(`/login?returnTo=${encodeURIComponent(returnTo)}`, { replace: true });
+    } else {
+      nav("/login", { replace: true });
+    }
   }
 
   return (
@@ -96,7 +109,7 @@ export default function RegisterPage() {
             <UtensilsCrossed className="text-[#E2B13C] h-8 w-8 md:h-10 md:w-10" />
           </div>
           <h1 className="text-[#E2B13C] text-3xl md:text-4xl font-extrabold tracking-tight">Create Account</h1>
-          <p className="text-[#E2B13C]/70 text-sm mt-2 font-medium max-w-[200px] md:max-w-none">Join the Smart Restaurant community</p>
+          <p className="text-[#E2B13C] text-sm mt-2 font-medium">Join the Smart Restaurant community</p>
 
           <div className="hidden md:block mt-10 space-y-4 text-left self-start mx-auto">
             {['Fast & Secured Ordering', 'Exclusive Rewards', 'Order History'].map((item) => (
@@ -119,7 +132,7 @@ export default function RegisterPage() {
                 <input
                   {...register("fullName", { maxLength: { value: 50, message: "Max 50 chars" } })}
                   className="w-full h-12 rounded-2xl border border-slate-100 bg-slate-50 px-5 text-[15px] outline-none transition-all focus:bg-white focus:ring-4 focus:ring-[#E2B13C]/10 focus:border-[#E2B13C]"
-                  placeholder="John Doe"
+                  placeholder="Enter your full name"
                 />
                 {errors.fullName && <p className="text-[11px] text-red-500 ml-1 font-semibold">{errors.fullName.message}</p>}
               </div>
@@ -134,7 +147,7 @@ export default function RegisterPage() {
                     pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: "Invalid email" }
                   })}
                   className="w-full h-12 rounded-2xl border border-slate-100 bg-slate-50 px-5 text-[15px] outline-none transition-all focus:bg-white focus:ring-4 focus:ring-[#E2B13C]/10 focus:border-[#E2B13C]"
-                  placeholder="you@example.com"
+                  placeholder="Enter your email"
                 />
                 {errors.email && <p className="text-xs text-red-500 ml-1 font-semibold">{errors.email.message}</p>}
               </div>
@@ -149,7 +162,7 @@ export default function RegisterPage() {
                     minLength: { value: 6, message: "Min 6 characters" }
                   })}
                   className="w-full h-12 rounded-2xl border border-slate-100 bg-slate-50 px-5 text-[15px] outline-none transition-all focus:bg-white focus:ring-4 focus:ring-[#E2B13C]/10 focus:border-[#E2B13C]"
-                  placeholder="••••••••"
+                  placeholder="Enter your password"
                 />
                 {errors.password && <p className="text-xs text-red-500 ml-1 font-semibold">{errors.password.message}</p>}
               </div>
@@ -160,20 +173,14 @@ export default function RegisterPage() {
                 <input
                   type="password"
                   {...register("confirmPassword", { 
-                    required: "Repeat your password",
+                    required: "Confirm password is required",
                     validate: (v) => v === password || "Passwords do not match"
                   })}
                   className="w-full h-12 rounded-2xl border border-slate-100 bg-slate-50 px-5 text-[15px] outline-none transition-all focus:bg-white focus:ring-4 focus:ring-[#E2B13C]/10 focus:border-[#E2B13C]"
-                  placeholder="••••••••"
+                  placeholder="Confirm your password"
                 />
                 {errors.confirmPassword && <p className="text-xs text-red-500 ml-1 font-semibold">{errors.confirmPassword.message}</p>}
               </div>
-
-              {serverError && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-[12px] font-medium italic">
-                  {String(serverError)}
-                </div>
-              )}
 
               {/* Terms & Conditions */}
               <div className="pt-2">
@@ -216,7 +223,10 @@ export default function RegisterPage() {
               <div className="text-center space-y-4">
                 <p className="text-[14px] text-slate-500 font-medium">
                   Already have an account?{" "}
-                  <Link to="/login" className="font-bold text-[#E2B13C] hover:underline transition-all">
+                  <Link 
+                    to={returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login"} 
+                    className="font-bold text-[#E2B13C] hover:underline transition-all"
+                  >
                     Sign In
                   </Link>
                 </p>

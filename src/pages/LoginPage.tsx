@@ -1,20 +1,28 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { UtensilsCrossed, ArrowRight, Loader2, CheckCircle2 } from 'lucide-react';
+import { UtensilsCrossed, Loader2, CheckCircle2 } from 'lucide-react';
 import { loginApi } from "../api/auth";
 import { setAccessToken } from "../api/axios";
 import { useAuth } from "../auth/useAuth";
+import { message } from "antd";
 
 type FormValues = {
   identifier: string;
   password: string;
 };
 
+function getErrorMessage(e: any) {
+  return (
+    e?.response?.data?.message ||
+    e?.message ||
+    "Login failed"
+  );
+}
+
 export default function LoginPage() {
   const nav = useNavigate();
+  const [sp] = useSearchParams();
   const { setUser } = useAuth();
-  const [serverError, setServerError] = useState<string | null>(null);
 
   const {
     register,
@@ -26,7 +34,6 @@ export default function LoginPage() {
   });
 
   const onSubmit = async (values: FormValues) => {
-    setServerError(null);
     try {
       const r = await loginApi(values.identifier, values.password);
       setAccessToken(r.accessToken);
@@ -35,9 +42,21 @@ export default function LoginPage() {
         subjectType: r.user.subjectType,
         subjectId: r.user.id,
       });
-      nav(r.homePath, { replace: true });
+      const returnTo = sp.get("returnTo");
+      if (returnTo) {
+        nav(returnTo, { replace: true });
+      } else {
+        const role = r.user.role as "USER" | "WAITER" | "KDS";
+        const fallback =
+          role === "USER" ? "/profile"
+          : role === "WAITER" ? "/waiter"
+          : "/kds";
+
+        nav(fallback, { replace: true });
+      }
+
     } catch (e: any) {
-      setServerError(e?.response?.data?.message ?? e?.message ?? "Login failed");
+      message.error(getErrorMessage(e));
     }
   };
 
@@ -54,7 +73,7 @@ export default function LoginPage() {
           <h1 className="text-[#E2B13C] text-3xl md:text-4xl font-extrabold tracking-tight">
             Smart Restaurant
           </h1>
-          <p className="mt-2 text-[#E2B13C]/70 text-sm font-medium tracking-wide max-w-[220px]">
+          <p className="mt-2 text-[#E2B13C] text-sm font-medium tracking-wide max-w-[220px]">
             Scan. Order. Enjoy.
           </p>
 
@@ -85,7 +104,7 @@ export default function LoginPage() {
                   className={`w-full rounded-2xl border bg-slate-50 px-5 py-3.5 text-[15px] outline-none transition-all focus:bg-white focus:ring-4 focus:ring-[#E2B13C]/10 focus:border-[#E2B13C] ${
                     errors.identifier ? "border-red-400" : "border-slate-100"
                   }`}
-                  placeholder="chef@smart.com"
+                  placeholder="Enter your username/email"
                 />
                 {errors.identifier && (
                   <p className="text-xs text-red-500 font-semibold ml-2">
@@ -105,7 +124,7 @@ export default function LoginPage() {
                   className={`w-full rounded-2xl border bg-slate-50 px-5 py-3.5 text-[15px] outline-none transition-all focus:bg-white focus:ring-4 focus:ring-[#E2B13C]/10 focus:border-[#E2B13C] ${
                     errors.password ? "border-red-400" : "border-slate-100"
                   }`}
-                  placeholder="••••••••"
+                  placeholder="Enter your password"
                 />
                 {errors.password && (
                   <p className="text-xs text-red-500 font-semibold ml-2">
@@ -114,17 +133,11 @@ export default function LoginPage() {
                 )}
                 
                 <div className="flex justify-end pt-1">
-                  <button type="button" className="text-sm font-bold text-[#E2B13C] hover:opacity-80 transition-opacity">
-                    Forgot?
+                  <button type="button" className="text-sm font-semibold text-[#E2B13C] hover:opacity-80 transition-opacity">
+                    Forgot password?
                   </button>
                 </div>
               </div>
-
-              {serverError && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-[13px] font-medium animate-shake">
-                  {serverError}
-                </div>
-              )}
 
               <button
                 type="submit"
@@ -144,7 +157,8 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => {
                   const base = import.meta.env.VITE_APP_API_URL;
-                  window.location.href = `${base}/api/auth/google`;
+                  const returnTo = sp.get("returnTo");
+                  window.location.href = `${base}/api/auth/google${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
                 }}
                 className="w-full rounded-full border border-slate-200 bg-white py-3.5 text-[15px] font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 flex items-center justify-center gap-3"
               >
@@ -164,16 +178,15 @@ export default function LoginPage() {
               <p className="text-[14px] text-slate-500 font-medium">
                 Don't have an account?
                 <button 
-                  onClick={() => nav("/register")}
+                  onClick={() => {
+                    const returnTo = sp.get("returnTo");
+                    nav(returnTo ? `/register?returnTo=${encodeURIComponent(returnTo)}` : "/register");
+                  }}
                   className="font-bold text-[#E2B13C] hover:underline ml-1"
                 >
                   Sign up
                 </button>
               </p>
-              
-              <button className="flex items-center justify-center gap-2 w-full text-[13px] font-bold text-slate-400 hover:text-slate-600 transition-colors">
-                Continue as Guest <ArrowRight size={14} />
-              </button>
             </div>
           </div>
         </div>

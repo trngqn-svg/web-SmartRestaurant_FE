@@ -4,10 +4,10 @@ import { io, type Socket } from "socket.io-client";
 import { cn } from "../utils/cn";
 import { formatMoneyFromCents } from "../utils/money";
 import { listMyOrdersApi, type PublicOrder } from "../api/public.order";
-import {
-  Utensils,
-  Receipt
-} from "lucide-react";
+import { Utensils, Receipt } from "lucide-react";
+import { getActiveSessionApi, type PublicTableSession } from "../api/public.session";
+import { requestBillApi } from "../api/public.bill";
+import { message } from "antd";
 
 function statusLabel(s: string) {
   switch (s) {
@@ -18,7 +18,6 @@ function statusLabel(s: string) {
     case "preparing":
       return "Preparing";
     case "ready":
-      return "Ready";
     case "ready_to_service":
       return "Ready";
     case "served":
@@ -37,8 +36,7 @@ function statusPillClass(s: string) {
   if (s === "pending") return cn(base, "bg-amber-50 text-amber-700 border-amber-100");
   if (s === "accepted") return cn(base, "bg-sky-50 text-sky-700 border-sky-100");
   if (s === "preparing") return cn(base, "bg-amber-50 text-amber-700 border-amber-100");
-  if (s === "ready") return cn(base, "bg-emerald-100 text-emerald-800 border-emerald-100");
-  if (s === "ready_to_service") return cn(base, "bg-emerald-100 text-emerald-800 border-emerald-100");
+  if (s === "ready" || s === "ready_to_service") return cn(base, "bg-emerald-100 text-emerald-800 border-emerald-100");
   if (s === "served") return cn(base, "bg-slate-100 text-slate-700 border-slate-200");
   if (s === "cancelled") return cn(base, "bg-rose-50 text-rose-700 border-rose-100");
   return cn(base, "bg-slate-50 text-slate-700 border-slate-200");
@@ -51,7 +49,6 @@ function lineStatusLabel(s: string) {
     case "preparing":
       return "Cooking";
     case "ready":
-      return "Ready";
     case "ready_to_service":
       return "Ready";
     case "served":
@@ -67,8 +64,7 @@ function linePillClass(s: string) {
   const base = "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold border";
   if (s === "queued") return cn(base, "bg-slate-100 text-slate-600 border-slate-100");
   if (s === "preparing") return cn(base, "bg-amber-50 text-amber-700 border-amber-100");
-  if (s === "ready") return cn(base, "bg-emerald-100 text-emerald-800 border-emerald-100");
-  if (s === "ready_to_service") return cn(base, "bg-emerald-100 text-emerald-800 border-emerald-100");
+  if (s === "ready" || s === "ready_to_service") return cn(base, "bg-emerald-100 text-emerald-800 border-emerald-100");
   if (s === "served") return cn(base, "bg-slate-100 text-slate-700 border-slate-200");
   if (s === "cancelled") return cn(base, "bg-rose-50 text-rose-700 border-rose-100");
   return cn(base, "bg-slate-50 text-slate-700 border-slate-200");
@@ -81,6 +77,8 @@ type LineStatusChangedPayload = {
   status: string;
   orderStatus?: string;
 };
+
+type SessionClosedPayload = { sessionId: string; status: string; closedAt: string };
 
 const PWS_URL = "http://localhost:3001/pws";
 
@@ -100,32 +98,15 @@ function fmtAgo(iso?: string) {
 
 function orderStepState(orderStatus: string) {
   const s = String(orderStatus || "").toLowerCase();
-
   const receivedDone = s !== "draft";
   const preparingDone = s === "preparing" || s === "ready" || s === "ready_to_service" || s === "served";
   const readyDone = s === "ready" || s === "ready_to_service" || s === "served";
-
   const preparingActive = s === "preparing";
   const readyActive = s === "ready" || s === "ready_to_service";
-
-  return {
-    receivedDone,
-    preparingDone,
-    readyDone,
-    preparingActive,
-    readyActive,
-  };
+  return { receivedDone, preparingDone, readyDone, preparingActive, readyActive };
 }
 
-function StepDot({
-  done,
-  active,
-  label,
-}: {
-  done: boolean;
-  active: boolean;
-  label: string;
-}) {
+function StepDot({ done, active, label }: { done: boolean; active: boolean; label: string }) {
   return (
     <div className="flex flex-col items-center gap-2">
       <div
@@ -158,6 +139,7 @@ function StepLine({ on }: { on: boolean }) {
 export default function OrdersPage() {
   const nav = useNavigate();
   const [sp] = useSearchParams();
+
   const table = sp.get("table") || "";
   const token = sp.get("token") || "";
   const q = `?table=${encodeURIComponent(table)}&token=${encodeURIComponent(token)}`;
@@ -169,28 +151,37 @@ export default function OrdersPage() {
   const [wsConnected, setWsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
-  const totalAll = useMemo(
-    () => orders.reduce((s, o) => s + (o.totalCents || 0), 0),
-    [orders]
-  );
+  const [session, setSession] = useState<PublicTableSession | null>(null);
+  const [requestingBill, setRequestingBill] = useState(false);
+
+  async function loadSession(opts?: { silent?: boolean }) {
+    const silent = !!opts?.silent;
+    try {
+      if (!table || !token) return;
+      const s = await getActiveSessionApi({ table, token });
+      setSession(s);
+    } catch (e: any) {
+      if (!silent) setSession(null);
+    }
+  }
+
+  const totalAll = useMemo(() => orders.reduce((s, o) => s + (o.totalCents || 0), 0), [orders]);
 
   const totalItems = useMemo(() => {
     let n = 0;
-    for (const o of orders) {
-      for (const it of o.items ?? []) n += Number(it.qty || 0);
-    }
+    for (const o of orders) for (const it of o.items ?? []) n += Number(it.qty || 0);
     return n;
   }, [orders]);
 
   async function load(opts?: { silent?: boolean }) {
     const silent = !!opts?.silent;
-
     try {
       setErr(null);
       if (!silent) setLoading(true);
       if (!table || !token) throw new Error("Invalid table/token");
       const data = await listMyOrdersApi({ table, token });
       setOrders(data);
+      await loadSession({ silent: true });
     } catch (e: any) {
       setErr(e?.message || "Load orders failed");
     } finally {
@@ -200,8 +191,11 @@ export default function OrdersPage() {
 
   useEffect(() => {
     load();
+    loadSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [table, token]);
 
+  // realtime
   useEffect(() => {
     if (!table || !token) return;
 
@@ -225,9 +219,7 @@ export default function OrdersPage() {
 
     const onStatusChanged = (p: StatusChangedPayload) => {
       const next = String(p.status || "").toLowerCase();
-      setOrders((xs) =>
-        xs.map((o) => (o.orderId === p.orderId ? { ...o, status: next } : o))
-      );
+      setOrders((xs) => xs.map((o) => (o.orderId === p.orderId ? { ...o, status: next } : o)));
     };
 
     const onLineStatusChanged = (p: LineStatusChangedPayload) => {
@@ -243,16 +235,17 @@ export default function OrdersPage() {
             return { ...it, status: nextLine };
           });
 
-          return {
-            ...o,
-            items,
-            status: nextOrder ?? o.status,
-          };
+          return { ...o, items, status: nextOrder ?? o.status };
         })
       );
     };
 
     const onOrderUpdated = () => load({ silent: true });
+
+    // ✅ flow mới: waiter accept -> session.closed -> chuyển sang Thanks
+    const onSessionClosed = (_p: SessionClosedPayload) => {
+      nav(`/thanks${q}`);
+    };
 
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
@@ -261,6 +254,7 @@ export default function OrdersPage() {
     socket.on("order.status_changed", onStatusChanged);
     socket.on("order.line_status_changed", onLineStatusChanged);
     socket.on("order.updated", onOrderUpdated);
+    socket.on("session.closed", onSessionClosed);
 
     return () => {
       try {
@@ -271,6 +265,7 @@ export default function OrdersPage() {
         socket.off("order.status_changed", onStatusChanged);
         socket.off("order.line_status_changed", onLineStatusChanged);
         socket.off("order.updated", onOrderUpdated);
+        socket.off("session.closed", onSessionClosed);
 
         socket.disconnect();
       } catch {}
@@ -279,6 +274,34 @@ export default function OrdersPage() {
     };
   }, [table, token]);
 
+  const canRequestBill = useMemo(() => {
+    const st = String(session?.status || "").toUpperCase();
+    return !!session && st === "OPEN" && !requestingBill;
+  }, [session, requestingBill]);
+
+  async function onRequestBill() {
+    if (!session) return;
+    if (!canRequestBill) {
+      const st = String(session.status || "").toUpperCase();
+      if (["BILL_REQUESTED", "PAYMENT_PENDING", "PAID"].includes(st)) {
+        nav(`/bill${q}`);
+        return;
+      }
+      return;
+    }
+
+    setRequestingBill(true);
+    try {
+      await requestBillApi({ sessionId: session.sessionId });
+      message.success("Bill requested");
+      nav(`/bill${q}`);
+    } catch (e: any) {
+      message.error(e?.message || "Request bill failed");
+    } finally {
+      setRequestingBill(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 pb-6">
       <div className="mx-auto max-w-3xl p-4 space-y-4">
@@ -286,9 +309,7 @@ export default function OrdersPage() {
           <span
             className={cn(
               "inline-flex items-center gap-1 rounded-full border ml-auto px-2.5 py-1 text-[11px] font-semibold",
-              wsConnected
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-slate-200 bg-slate-50 text-slate-600"
+              wsConnected ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"
             )}
             title="Realtime connection"
           >
@@ -296,22 +317,30 @@ export default function OrdersPage() {
             {wsConnected ? "Online" : "Offline"}
           </span>
         </div>
+
         {/* Summary header */}
         <div className="overflow-hidden rounded-[28px] bg-slate-600 text-white shadow-sm">
           <div className="p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="text-sm/5 font-medium text-white/85">Current Session Total</div>
-                <div className="mt-1 text-4xl font-extrabold tracking-tight">
-                  {formatMoneyFromCents(totalAll)}
-                </div>
+                <div className="mt-1 text-4xl font-extrabold tracking-tight">{formatMoneyFromCents(totalAll)}</div>
               </div>
 
               <button
-                onClick={() => {}}
-                className="shrink-0 rounded-full bg-slate-800 px-5 py-2.5 text-sm font-extrabold text-[#E2B13C] shadow-sm active:scale-[0.99]"
+                onClick={onRequestBill}
+                disabled={!session || String(session.status).toUpperCase() === "CLOSED" || requestingBill}
+                className={cn(
+                  "shrink-0 rounded-full px-5 py-2.5 text-sm font-extrabold shadow-sm active:scale-[0.99]",
+                  !session || String(session.status).toUpperCase() === "CLOSED"
+                    ? "bg-slate-700/60 text-white/60 cursor-not-allowed"
+                    : canRequestBill
+                    ? "bg-slate-800 text-[#E2B13C] hover:opacity-90"
+                    : "bg-slate-800/70 text-[#E2B13C]/80 hover:opacity-90"
+                )}
+                title={canRequestBill ? "Request bill" : "Bill already requested / paid"}
               >
-                Request Bill
+                {requestingBill ? "Requesting..." : "Request Bill"}
               </button>
             </div>
           </div>
@@ -332,31 +361,19 @@ export default function OrdersPage() {
 
         {/* Add more button */}
         <div className="flex items-center justify-between">
-          <button
-            onClick={() => nav(`/menu${q}`)}
-            className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-[#E2B13C]"
-          >
+          <button onClick={() => nav(`/menu${q}`)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-[#E2B13C]">
             + Add more
           </button>
         </div>
 
-        {err ? (
-          <div className="rounded-2xl border bg-white p-4 text-sm text-rose-600 shadow-sm">
-            {err}
-          </div>
-        ) : null}
+        {err ? <div className="rounded-2xl border bg-white p-4 text-sm text-rose-600 shadow-sm">{err}</div> : null}
 
         {loading ? (
-          <div className="rounded-[28px] border bg-white p-6 text-sm text-slate-600 shadow-sm">
-            Loading...
-          </div>
+          <div className="rounded-[28px] border bg-white p-6 text-sm text-slate-600 shadow-sm">Loading...</div>
         ) : orders.length === 0 ? (
           <div className="rounded-[28px] border bg-white p-6 text-center text-sm text-slate-600 shadow-sm">
             No orders yet.{" "}
-            <button
-              onClick={() => nav(`/menu${q}`)}
-              className="font-semibold text-slate-900 underline"
-            >
+            <button onClick={() => nav(`/menu${q}`)} className="font-semibold text-slate-900 underline">
               Browse Menu
             </button>
           </div>
@@ -365,37 +382,26 @@ export default function OrdersPage() {
             {orders.map((o) => {
               const st = String(o.status || "").toLowerCase();
               const step = orderStepState(st);
-              const isReady = (st === "ready" || st === "ready_to_service");
+              const isReady = st === "ready" || st === "ready_to_service";
               const isPreparing = st === "preparing";
               const isReceived = st === "pending" || st === "accepted";
               const timeAgo = fmtAgo(o.submittedAt);
 
               return (
-                <div
-                  key={o.orderId}
-                  className="overflow-hidden rounded-[28px] border border-slate-100 bg-white shadow-sm"
-                >
-                  {/* Header */}
+                <div key={o.orderId} className="overflow-hidden rounded-[28px] border border-slate-100 bg-white shadow-sm">
                   <div className="flex items-center justify-between gap-3 px-5 py-4">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-baseline gap-2">
-                        <div className="text-lg font-extrabold text-slate-900">
-                          Order #{o.orderId.slice(-2)}
-                        </div>
-                        <div className="text-sm font-medium text-slate-500">
-                          {timeAgo || ""}
-                        </div>
+                        <div className="text-lg font-extrabold text-slate-900">Order #{o.orderId.slice(-2)}</div>
+                        <div className="text-sm font-medium text-slate-500">{timeAgo || ""}</div>
                       </div>
                     </div>
 
-                    <span className={statusPillClass(st)}>
-                      {statusLabel(st)}
-                    </span>
+                    <span className={statusPillClass(st)}>{statusLabel(st)}</span>
                   </div>
 
                   <div className="border-t border-slate-100" />
 
-                  {/* Stepper */}
                   <div className="px-5 py-5">
                     <div className="flex items-center">
                       <StepDot done={step.receivedDone} active={isReceived} label="Received" />
@@ -407,37 +413,27 @@ export default function OrdersPage() {
 
                     {isReady ? (
                       <div className="mt-5 rounded-2xl bg-emerald-100 px-4 py-4 text-emerald-900">
-                        <div className="text-sm font-extrabold">
-                          Your order is ready! Please pick up at the counter.
-                        </div>
+                        <div className="text-sm font-extrabold">Your order is ready! Please pick up at the counter.</div>
                       </div>
                     ) : null}
                   </div>
 
                   <div className="border-t border-slate-100" />
 
-                  {/* Items */}
                   <div className="px-5 py-4">
                     <div className="space-y-3">
                       {(o.items ?? []).map((it: any) => {
                         const lineSt = String(it.status || "queued").toLowerCase();
-
                         return (
                           <div key={it.lineId} className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
                               <div className="flex items-center gap-3">
-                                <div className="shrink-0 text-sm font-extrabold text-rose-600">
-                                  {it.qty}x
-                                </div>
-                                <div className="truncate text-sm font-semibold text-slate-900">
-                                  {it.nameSnapshot}
-                                </div>
+                                <div className="shrink-0 text-sm font-extrabold text-rose-600">{it.qty}x</div>
+                                <div className="truncate text-sm font-semibold text-slate-900">{it.nameSnapshot}</div>
                               </div>
                             </div>
 
-                            <span className={linePillClass(lineSt)}>
-                              {lineStatusLabel(lineSt)}
-                            </span>
+                            <span className={linePillClass(lineSt)}>{lineStatusLabel(lineSt)}</span>
                           </div>
                         );
                       })}
@@ -446,9 +442,7 @@ export default function OrdersPage() {
                     <div className="mt-4 border-t border-dashed border-slate-200 pt-4">
                       <div className="flex items-center justify-between">
                         <div className="text-sm font-extrabold text-slate-900">Order Total</div>
-                        <div className="text-sm font-extrabold text-slate-900">
-                          {formatMoneyFromCents(o.totalCents)}
-                        </div>
+                        <div className="text-sm font-extrabold text-slate-900">{formatMoneyFromCents(o.totalCents)}</div>
                       </div>
                     </div>
                   </div>

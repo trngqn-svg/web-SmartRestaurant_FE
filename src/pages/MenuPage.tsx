@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { usePublicMenu } from "../hooks/usePublicMenu";
 import { cn } from "../utils/cn";
@@ -7,11 +7,29 @@ import { useCartStore } from "../store/cart.store";
 import {
   Search,
   Star,
-  UtensilsCrossed,
   AlertCircle,
   Plus,
   Image as ImageIcon,
 } from "lucide-react";
+import { openTableSessionApi } from "../api/public.session";
+import { message } from "antd";
+
+function StatusPill({ status }: { status: string }) {
+  const map: Record<string, { label: string; wrap: string; dot: string }> = {
+    available: { label: "Available", wrap: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-500" },
+    sold_out: { label: "Sold Out", wrap: "bg-rose-100 text-rose-700", dot: "bg-rose-500" },
+  };
+
+  const key = String(status ?? "").toLowerCase();
+  const cfg = map[key] ?? { label: key || "unknown", wrap: "bg-slate-100 text-slate-700", dot: "bg-slate-400" };
+
+  return (
+    <span className={cn("inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium", cfg.wrap)}>
+      <span className={cn("h-2 w-2 rounded-full", cfg.dot)} />
+      {cfg.label}
+    </span>
+  );
+}
 
 export default function MenuPage() {
   const [sp] = useSearchParams();
@@ -30,9 +48,24 @@ export default function MenuPage() {
   const [q, setQ] = useState("");
   const [activeCat, setActiveCat] = useState<string>("all");
 
+  const topRef = useRef<HTMLDivElement | null>(null);
+
+  function scrollToTop() {
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [q, activeCat]);
+    if (!table || !token) return;
+    async function run() {
+      try {
+        if (!table || !token) return;
+        await openTableSessionApi({ table, token });
+      } catch (e: any){
+        message.error(e);
+      }
+    }
+    run();
+  }, [table, token]);
 
   const categories = data?.categories ?? [];
   const items = data?.items ?? [];
@@ -91,11 +124,17 @@ export default function MenuPage() {
     token
   )}`;
 
+  const onPickCategory = (id: string) => {
+    setActiveCat(id);
+    scrollToTop();
+  };
+
   return (
     <div className="min-h-screen pb-16">
-      {/* Sticky header area */}
-      <div className="sticky top-0 z-30 bg-[#0F172A] lg:bg-slate-50 backdrop-blur-lg pt-2 px-4">
-        <div className="max-w-5xl mx-auto space-y-4 pb-2">
+      <div ref={topRef} />
+      {/* Header */}
+      <div className="bg-[#0F172A] lg:bg-slate-50 pt-2 px-4">
+        <div className="max-w-5xl mx-auto space-y-4 pb-3">
           {/* Brand & Table */}
           <div className="flex lg:hidden items-center justify-between px-1">
             <div className="flex items-center justify-between w-full">
@@ -103,10 +142,7 @@ export default function MenuPage() {
 
               <div className="flex flex-col items-center">
                 <div className="flex items-center gap-2">
-                  <div className="bg-[#0F172A] rounded-lg shadow-sm">
-                    <UtensilsCrossed className="w-5 h-5 text-[#E2B13C]" />
-                  </div>
-                  <span className="text-lg font-bold text-[#E2B13C] tracking-[0.15em] leading-none">
+                  <span className="text-lg font-bold text-[#E2B13C] leading-none">
                     Smart Restaurant
                   </span>
                 </div>
@@ -123,7 +159,7 @@ export default function MenuPage() {
             </div>
           </div>
 
-          {/* Search Bar */}
+          {/* Search */}
           <div className="relative group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-[#E2B13C] transition-colors" />
             <input
@@ -133,30 +169,34 @@ export default function MenuPage() {
               className="w-full bg-white border border-slate-200 rounded-2xl py-2 pl-10 pr-2 lg:py-4 lg:pl-12 lg:pr-4 text-sm font-medium shadow-sm focus:ring-2 focus:ring-[#E2B13C]/20 focus:border-[#E2B13C] outline-none transition-all"
             />
           </div>
+        </div>
+      </div>
 
-          {/* Category Filter Chips */}
+      {/* Category bar sticky */}
+      <div className="sticky top-0 z-30 bg-white lg:static lg:bg-transparent px-4 pb-2 pt-2 shadow-sm lg:shadow-none">
+        <div className="max-w-5xl mx-auto">
           <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
             <button
-              onClick={() => setActiveCat("all")}
+              onClick={() => onPickCategory("all")}
               className={cn(
-                "whitespace-nowrap rounded-xl px-5 py-2 text-xs font-bold uppercase tracking-wider transition-all",
+                "whitespace-nowrap rounded-2xl px-5 py-2 text-xs font-bold uppercase tracking-wider transition-all",
                 activeCat === "all"
-                  ? "bg-[#E2B13C] text-[#0F172A] lg:bg-[#0F172A] lg:text-[#E2B13C]"
-                  : "bg-white border border-slate-200 text-slate-500 hover:border-[#E2B13C]"
+                  ? "bg-slate-900 text-[#E2B13C] shadow-sm"
+                  : "bg-[#EEF2F6] text-gray-700"
               )}
             >
-              All Items
+              All
             </button>
 
             {categories.map((c) => (
               <button
                 key={c._id}
-                onClick={() => setActiveCat(c._id)}
+                onClick={() => onPickCategory(c._id)}
                 className={cn(
-                  "whitespace-nowrap rounded-xl px-5 py-2 text-xs font-bold uppercase tracking-wider transition-all",
+                  "whitespace-nowrap rounded-2xl px-5 py-2 text-xs font-bold uppercase tracking-wider transition-all",
                   activeCat === c._id
-                    ? "bg-[#E2B13C] text-[#0F172A] lg:bg-[#0F172A] lg:text-[#E2B13C]"
-                    : "bg-white border border-slate-200 text-slate-500 hover:border-[#E2B13C]"
+                    ? "bg-slate-900 text-[#E2B13C] shadow-sm"
+                    : "bg-[#EEF2F6] text-gray-700"
                 )}
               >
                 {c.name}
@@ -214,30 +254,28 @@ export default function MenuPage() {
                       {it.name}
                     </h3>
 
-                    <div className="text-lg font-black text-[#0F172A]">
-                      {formatMoneyFromCents(it.priceCents)}
-                    </div>
-
                     <div className="flex items-center gap-2 mt-1">
-                      <Star className="w-3 h-3 text-[#E2B13C] fill-[#E2B13C]" />
-                      <span className="text-[11px] font-bold">
+                      <Star className="w-4 h-4 text-[#E2B13C] fill-[#E2B13C]" />
+                      <span className="text-sm font-bold">
                         {it.ratingAvg || 0.0}
                       </span>
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-sm text-orange-500">
                         ({it.ratingCount || 0} reviews)
                       </span>
                     </div>
 
-                    <div className="mt-2">
-                      {soldOut ? (
-                        <span className="text-[10px] font-black uppercase text-red-500">
-                          Sold Out
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-black uppercase text-emerald-600">
-                          Available
-                        </span>
-                      )}
+                    <div className="my-2">
+                      <StatusPill status={it.status}/>
+                    </div>
+
+                    <div className="sm:hidden">
+                      {it.description ? (
+                        <div className="mt-2 line-clamp-2 text-[12px] leading-5 text-slate-500">{it.description}</div>
+                      ) : null}
+                    </div>
+
+                    <div className="text-lg font-black text-[#0F172A]">
+                      {formatMoneyFromCents(it.priceCents)}
                     </div>
                   </div>
 
