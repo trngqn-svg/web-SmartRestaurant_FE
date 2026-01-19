@@ -16,7 +16,7 @@ import OrdersPage from "../pages/OrdersPage";
 import CustomerLayout from "../layout/CustomerLayout";
 import BillPage from "../pages/BillPage";
 import ThankYouPage from "../pages/ThankYouPage";
-import MockPayPage from "../pages/MockPayPage";
+import VnpayReturnPage from "../pages/VnpayReturnPage";
 import WaiterBillsPage from "../pages/waiter/WaiterBillsPage";
 import WaiterLayout from "../pages/waiter/WaiterLayout"
 
@@ -105,7 +105,7 @@ export default function AppRoutes() {
       <Route path="/menu/item/:id" element={<ItemDetailPage />} />
       <Route path="/bill" element={<BillPage />} />
       <Route path="/thanks" element={<ThankYouPage />} />
-      <Route path="/mock-pay" element={<MockPayPage />} />
+      <Route path="/payment/vnpay-return" element={<VnpayReturnPage />} />
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
       <Route path="*" element={<Navigate to="/login" replace />} />

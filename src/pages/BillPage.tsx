@@ -5,7 +5,7 @@ import { cn } from "../utils/cn";
 import { formatMoneyFromCents } from "../utils/money";
 import { getActiveSessionApi, type PublicTableSession } from "../api/public.session";
 import { getActiveBillApi, requestBillApi, payCashApi } from "../api/public.bill";
-import { createPaymentApi } from "../api/public.payments";
+import { createVnpayPaymentApi } from "../api/public.payments";
 import { CreditCard, Banknote, Loader2, CheckCircle2 } from "lucide-react";
 import { message } from "antd";
 
@@ -135,8 +135,8 @@ export default function BillPage() {
         return;
       }
 
-      const res = await createPaymentApi(billId, totalCents);
-      nav(res.checkoutUrl.replace(/^.*\/mock-pay/, "/mock-pay"));
+      const res = await createVnpayPaymentApi(billId);
+      window.location.href = res.paymentUrl;
     } catch (e: any) {
       message.error(e?.message || "Pay failed");
     } finally {
