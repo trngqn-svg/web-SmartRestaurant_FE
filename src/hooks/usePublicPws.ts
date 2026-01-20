@@ -24,7 +24,6 @@ export function usePublicPws(args: {
 
     sockRef.current = s;
 
-    // optional debug
     s.onAny((event, payload) => onAnyEvent?.(event, payload));
 
     s.on("session.closed", (p: SessionClosedPayload) => {

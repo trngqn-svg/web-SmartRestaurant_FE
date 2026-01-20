@@ -22,6 +22,7 @@ import WaiterLayout from "../pages/waiter/WaiterLayout"
 import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import ForgotPasswordOtpPage from "../pages/ForgotPasswordOtpPage";
 import ResetPasswordPage from "../pages/ResetPasswordPage";
+import UserBillsPage from "../pages/user/UserBillsPage";
 
 function PublicOnly({ children }: { children: React.ReactNode }) {
   const { loading, user } = useAuth();
@@ -101,6 +102,15 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute roles={["USER"]}>
               <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/profile/bills"
+          element={
+            <ProtectedRoute roles={["USER"]}>
+              <UserBillsPage />
             </ProtectedRoute>
           }
         />

@@ -8,8 +8,9 @@ import { getActiveBillApi, requestBillApi, payCashApi } from "../api/public.bill
 import { createVnpayPaymentApi } from "../api/public.payments";
 import { CreditCard, Banknote, Loader2, CheckCircle2 } from "lucide-react";
 import { message } from "antd";
+import { config } from "../config/websocket";
 
-const PWS_URL = "http://localhost:3001/pws";
+const PWS_URL = config.PWS_URL;
 
 type PayMethod = "CASH" | "ONLINE";
 

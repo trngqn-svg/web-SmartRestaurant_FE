@@ -8,6 +8,7 @@ import { Utensils, Receipt } from "lucide-react";
 import { getActiveSessionApi, type PublicTableSession } from "../api/public.session";
 import { requestBillApi } from "../api/public.bill";
 import { message } from "antd";
+import { config } from "../config/websocket";
 
 function statusLabel(s: string) {
   switch (s) {
@@ -80,7 +81,7 @@ type LineStatusChangedPayload = {
 
 type SessionClosedPayload = { sessionId: string; status: string; closedAt: string };
 
-const PWS_URL = "http://localhost:3001/pws";
+const PWS_URL = config.PWS_URL;
 
 function fmtAgo(iso?: string) {
   if (!iso) return "";

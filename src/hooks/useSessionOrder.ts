@@ -43,20 +43,17 @@ export function useSessionOrder(table: string, token: string) {
 
         if (!table || !token) throw new Error("Invalid table/token");
 
-        // ✅ luôn gọi openSession để lấy sessionKey hiện tại
         const res: OpenSessionRes = await openSessionApi({ table, token });
         if (cancelled) return;
 
         setSessionKey(res.sessionKey);
 
-        // ✅ nếu cache cùng sessionKey thì reuse orderId cũ, còn khác thì dùng orderId mới
         const stored = readStored(table);
         if (stored && stored.sessionKey === res.sessionKey) {
           setOrderId(stored.orderId);
           return;
         }
 
-        // session mới -> dùng orderId từ backend và overwrite cache
         setOrderId(res.orderId);
         writeStored(table, { orderId: res.orderId, sessionKey: res.sessionKey });
       } catch (e: any) {
