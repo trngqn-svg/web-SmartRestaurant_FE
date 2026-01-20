@@ -1,0 +1,173 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { UtensilsCrossed, Loader2, KeyRound } from "lucide-react";
+import { message } from "antd";
+import { verifyOtpApi, forgotPasswordApi } from "../api/auth.password";
+import { PasswordResetStore } from "../auth/passwordReset.store";
+
+function onlyDigits(s: string) {
+  return s.replace(/\D/g, "");
+}
+
+export default function ForgotPasswordOtpPage() {
+  const nav = useNavigate();
+  const [sp] = useSearchParams();
+
+  const [otp, setOtp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
+
+  const resetId = PasswordResetStore.getResetId();
+  const email = PasswordResetStore.getEmail();
+
+  useEffect(() => {
+    if (!resetId) {
+      const returnTo = sp.get("returnTo");
+      nav(returnTo ? `/forgot-password?returnTo=${encodeURIComponent(returnTo)}` : "/forgot-password", {
+        replace: true,
+      });
+    }
+  }, [resetId, nav, sp]);
+
+  const cooldownLeft = useMemo(() => {
+    if (!cooldownUntil) return 0;
+    return Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+  }, [cooldownUntil]);
+
+  async function onVerify() {
+    const code = onlyDigits(otp).slice(0, 6);
+    if (code.length !== 6) {
+      message.error("OTP must have 6 digits");
+      return;
+    }
+    if (!resetId) return;
+
+    try {
+      setLoading(true);
+      const r = await verifyOtpApi({ resetId, otp: code });
+      PasswordResetStore.setResetToken(r.resetToken);
+
+      const returnTo = sp.get("returnTo");
+      nav(
+        returnTo
+          ? `/forgot-password/reset?returnTo=${encodeURIComponent(returnTo)}`
+          : "/forgot-password/reset",
+        { replace: true }
+      );
+    } catch (e: any) {
+      const data = e?.response?.data;
+      const msg = data?.message ?? "OTP incorrect or expirated";
+      message.error(typeof msg === "string" ? msg : "OTP incorrect or expirated");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onResend() {
+    if (cooldownLeft > 0) return;
+    if (!email) {
+      message.info("Please enter email again");
+      nav("/forgot-password", { replace: true });
+      return;
+    }
+
+    try {
+      setResending(true);
+      const r = await forgotPasswordApi(email);
+      message.success(r.message ?? "If email exist, we will send to OTP.");
+
+      if (r.resetId) {
+        PasswordResetStore.setResetId(r.resetId);
+      }
+      if (r.cooldownSeconds) {
+        setCooldownUntil(Date.now() + r.cooldownSeconds * 1000);
+      }
+    } catch (e: any) {
+      message.error(e?.response?.data?.message ?? "Cannot send OTP again");
+    } finally {
+      setResending(false);
+    }
+  }
+
+  const returnTo = sp.get("returnTo");
+  const backLoginPath = returnTo
+    ? `/login?returnTo=${encodeURIComponent(returnTo)}`
+    : "/login";
+
+  return (
+    <div className="min-h-[100svh] bg-[#EEF1F5] flex items-center justify-center font-sans px-4">
+      <div className="w-full max-w-[900px] md:flex md:rounded-[32px] md:shadow-2xl overflow-hidden bg-white">
+        {/* LEFT */}
+        <div className="bg-slate-900 px-6 pt-16 pb-20 md:pb-16 md:w-1/2 flex flex-col items-center justify-center text-center shrink-0">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[22px] bg-white/10 backdrop-blur-md text-[#E2B13C] mb-4 border border-white/20 shadow-xl">
+            <UtensilsCrossed size={40} strokeWidth={2.5} />
+          </div>
+          <h1 className="text-[#E2B13C] text-3xl md:text-4xl font-extrabold tracking-tight">
+            Smart Restaurant
+          </h1>
+          <p className="mt-2 text-[#E2B13C] text-sm font-medium tracking-wide max-w-[280px]">
+            Enter the 6-digit OTP code sent to your email.
+          </p>
+        </div>
+
+        {/* RIGHT */}
+        <div className="-mt-10 md:mt-0 bg-white rounded-t-[28px] md:rounded-none px-8 pt-10 pb-12 md:p-12 md:w-1/2 flex-1 relative z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.04)] md:shadow-none flex flex-col justify-center">
+          <div className="max-w-[340px] mx-auto w-full">
+            <h2 className="text-2xl md:text-3xl font-bold text-slate-800 mb-2">
+              Verify OTP
+            </h2>
+
+            <div className="space-y-2 mt-6">
+              <label className="text-[12px] font-bold text-slate-400 uppercase tracking-widest ml-1">
+                OTP (6 digits)
+              </label>
+
+              <div className="relative">
+                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  value={otp}
+                  onChange={(e) => setOtp(onlyDigits(e.target.value))}
+                  inputMode="numeric"
+                  maxLength={6}
+                  className="w-full rounded-2xl border bg-slate-50 pl-11 pr-5 py-3.5 text-[18px] tracking-[0.35em] text-center outline-none transition-all focus:bg-white focus:ring-4 focus:ring-[#E2B13C]/10 focus:border-[#E2B13C] border-slate-100"
+                  placeholder="......"
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onVerify}
+              disabled={loading}
+              className="mt-6 w-full flex items-center justify-center gap-2 rounded-full bg-slate-900 py-4 text-[16px] font-bold text-[#E2B13C] shadow-lg shadow-[#E2B13C]/20 transition-all hover:bg-slate-800 active:scale-[0.98] disabled:opacity-70 disabled:grayscale"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="animate-spin" size={20} /> Verifying...
+                </>
+              ) : (
+                "Verify"
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onResend}
+              disabled={resending || cooldownLeft > 0}
+              className="mt-3 w-full rounded-full border border-slate-200 bg-white py-3.5 text-[15px] font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-60"
+            >
+              {cooldownLeft > 0 ? `Resend in ${cooldownLeft}s` : resending ? "Resending..." : "Resend OTP"}
+            </button>
+
+            <div className="mt-8 text-center text-[14px] text-slate-500 font-medium">
+              <Link to={backLoginPath} className="font-bold text-[#E2B13C] hover:underline">
+                Back to login
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

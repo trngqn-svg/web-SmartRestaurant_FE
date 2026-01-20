@@ -132,11 +132,16 @@ export default function LoginPage() {
                   </p>
                 )}
                 
-                <div className="flex justify-end pt-1">
-                  <button type="button" className="text-sm font-semibold text-[#E2B13C] hover:opacity-80 transition-opacity">
-                    Forgot password?
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const returnTo = sp.get("returnTo");
+                    nav(returnTo ? `/forgot-password?returnTo=${encodeURIComponent(returnTo)}` : "/forgot-password");
+                  }}
+                  className="text-sm font-semibold text-[#E2B13C] hover:opacity-80 transition-opacity"
+                >
+                  Forgot password?
+                </button>
               </div>
 
               <button
