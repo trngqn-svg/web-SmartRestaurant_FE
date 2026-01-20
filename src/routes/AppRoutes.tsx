@@ -19,6 +19,9 @@ import ThankYouPage from "../pages/ThankYouPage";
 import VnpayReturnPage from "../pages/VnpayReturnPage";
 import WaiterBillsPage from "../pages/waiter/WaiterBillsPage";
 import WaiterLayout from "../pages/waiter/WaiterLayout"
+import ForgotPasswordPage from "../pages/ForgotPasswordPage";
+import ForgotPasswordOtpPage from "../pages/ForgotPasswordOtpPage";
+import ResetPasswordPage from "../pages/ResetPasswordPage";
 
 function PublicOnly({ children }: { children: React.ReactNode }) {
   const { loading, user } = useAuth();
@@ -106,6 +109,9 @@ export default function AppRoutes() {
       <Route path="/bill" element={<BillPage />} />
       <Route path="/thanks" element={<ThankYouPage />} />
       <Route path="/payment/vnpay-return" element={<VnpayReturnPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/forgot-password/otp" element={<ForgotPasswordOtpPage />} />
+      <Route path="/forgot-password/reset" element={<ResetPasswordPage />} />
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
