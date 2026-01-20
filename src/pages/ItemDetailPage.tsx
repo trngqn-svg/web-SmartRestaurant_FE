@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { usePublicMenu } from "../hooks/usePublicMenu";
 import { cn } from "../utils/cn";
 import { formatMoneyFromCents } from "../utils/money";
 import { useCartStore } from "../store/cart.store";
 import ReviewsSection from "../components/ReviewsSection";
+import { usePublicMenuItem } from "../hooks/usePublicMenuItem";
+import { getPublicMenuApi } from "../api/public.menu";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -20,7 +21,6 @@ import {
 } from "lucide-react";
 
 type Sel = Record<string, string[]>;
-
 type VError = { groupId: string; message: string } | null;
 
 function sumAdj(item: any, sel: Sel) {
@@ -51,29 +51,60 @@ export default function ItemDetailPage() {
   const nav = useNavigate();
   const { id = "" } = useParams();
   const [sp] = useSearchParams();
+
   const table = sp.get("table") || "";
   const token = sp.get("token") || "";
 
-  const { data, loading, err, tableNumber } = usePublicMenu(table, token);
+  // ✅ NEW: fetch item by endpoint /public/menu/items/:itemId
+  const { item, loading, err, tableNumber } = usePublicMenuItem(table, token, id);
+
   const addLine = useCartStore((s) => s.addLine);
 
-  const item = useMemo(() => data?.items?.find((x) => x._id === id) ?? null, [data, id]);
+  const qstr = useMemo(() => {
+    return `?table=${encodeURIComponent(table)}&token=${encodeURIComponent(token)}`;
+  }, [table, token]);
 
-  const qstr = `?table=${encodeURIComponent(table)}&token=${encodeURIComponent(token)}`;
+  // ✅ Related items (server-side by category)
+  const [related, setRelated] = useState<any[]>([]);
+  useEffect(() => {
+    let cancelled = false;
 
-  const related = useMemo(() => {
-    const xs = data?.items ?? [];
-    if (!item) return [];
-    return xs
-      .filter((x) => x._id !== item._id && x.categoryId === item.categoryId)
-      .sort((a: any, b: any) => {
-        const sa = a.status === "available" ? 0 : 1;
-        const sb = b.status === "available" ? 0 : 1;
-        if (sa !== sb) return sa - sb;
-        return (b.ratingAvg || 0) - (a.ratingAvg || 0);
-      })
-      .slice(0, 10);
-  }, [data?.items, item?._id, item?.categoryId]);
+    async function run() {
+      try {
+        if (!item || !table || !token) return;
+
+        const res = await getPublicMenuApi({
+          table,
+          token,
+          page: 1,
+          limit: 10,
+          q: undefined,
+          categoryId: item.categoryId,
+        });
+
+        if (cancelled) return;
+
+        const xs = (res.items ?? [])
+          .filter((x: any) => x._id !== item._id)
+          .sort((a: any, b: any) => {
+            const sa = a.status === "available" ? 0 : 1;
+            const sb = b.status === "available" ? 0 : 1;
+            if (sa !== sb) return sa - sb;
+            return (b.ratingAvg || 0) - (a.ratingAvg || 0);
+          })
+          .slice(0, 10);
+
+        setRelated(xs);
+      } catch {
+        if (!cancelled) setRelated([]);
+      }
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [item?._id, item?.categoryId, table, token]);
 
   const [qty, setQty] = useState(1);
   const [note, setNote] = useState("");
@@ -110,7 +141,7 @@ export default function ItemDetailPage() {
 
   if (loading) return <div className="p-6">Loading...</div>;
 
-  if (err || !data || !item) {
+  if (err || !item) {
     return (
       <div className="min-h-screen bg-slate-50 p-6">
         <div className="mx-auto max-w-xl rounded-2xl bg-white p-6 shadow-sm">
@@ -138,15 +169,12 @@ export default function ItemDetailPage() {
   function toggleOption(groupId: string, optionId: string, selectionType: "single" | "multiple") {
     setSel((prev) => {
       const cur = new Set(prev[groupId] ?? []);
-      if (selectionType === "single") {
-        return { ...prev, [groupId]: [optionId] };
-      }
+      if (selectionType === "single") return { ...prev, [groupId]: [optionId] };
       if (cur.has(optionId)) cur.delete(optionId);
       else cur.add(optionId);
       return { ...prev, [groupId]: [...cur] };
     });
 
-    // nếu đang báo lỗi đúng group này thì clear nhẹ khi user thao tác
     setVErr((prev) => (prev?.groupId === groupId ? null : prev));
     setFlashGroupId(null);
   }
@@ -182,6 +210,7 @@ export default function ItemDetailPage() {
   }
 
   function onAdd() {
+    if (!item) return;
     const v = validate(item, sel);
     if (v) {
       setVErr(v);
@@ -197,8 +226,8 @@ export default function ItemDetailPage() {
 
     addLine({
       key,
-      itemId: item!._id,
-      name: item!.name,
+      itemId: item._id,
+      name: item.name,
       photoUrl: img,
       unitPriceCents: unit,
       qty,
@@ -318,7 +347,9 @@ export default function ItemDetailPage() {
                 <div className="mt-1 flex items-center">
                   <div className="inline-flex items-center gap-1 mr-2">
                     <Clock className="h-3.5 w-3.5" />
-                    <span className="text-sm">{item.prepTimeMinutes ? `Prep time: ~${item.prepTimeMinutes} mins` : "Prep time"}</span>
+                    <span className="text-sm">
+                      {item.prepTimeMinutes ? `Prep time: ~${item.prepTimeMinutes} mins` : "Prep time"}
+                    </span>
                   </div>
 
                   <div className="text-sm">
@@ -373,7 +404,9 @@ export default function ItemDetailPage() {
                   onClick={onAdd}
                   className={cn(
                     "mt-4 w-full rounded-2xl px-4 py-3 text-sm font-extrabold tracking-tight shadow-sm",
-                    disabled ? "bg-slate-100 text-slate-400" : "bg-slate-800 text-[#E2B13C] hover:bg-slate-700 active:scale-[0.99]"
+                    disabled
+                      ? "bg-slate-100 text-slate-400"
+                      : "bg-slate-800 text-[#E2B13C] hover:bg-slate-700 active:scale-[0.99]"
                   )}
                 >
                   Add to cart • {formatMoneyFromCents(total)}
@@ -436,7 +469,9 @@ export default function ItemDetailPage() {
                               <span
                                 className={cn(
                                   "grid h-5 w-5 place-items-center rounded-md border",
-                                  isOn ? "border-emerald-600 bg-emerald-50 text-emerald-700" : "border-slate-300 text-slate-300"
+                                  isOn
+                                    ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                    : "border-slate-300 text-slate-300"
                                 )}
                               >
                                 <Check className="h-4 w-4" />
@@ -471,7 +506,6 @@ export default function ItemDetailPage() {
                 })}
               </div>
 
-              {/* fallback lỗi (nếu cần) */}
               {vErr && !item.modifierGroups?.some((g: any) => g._id === vErr.groupId) ? (
                 <div className="mt-4 text-sm font-medium text-rose-600">{vErr.message}</div>
               ) : null}

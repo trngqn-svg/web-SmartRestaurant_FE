@@ -1,29 +1,11 @@
 import { publicApi } from "./axios";
 
-export type PublicMenuResponse = {
-  table: {
-    _id: string;
-    tableNumber: string;
-    capacity: number;
-    location?: string;
-    description?: string;
-    status: "active" | "inactive" | "occupied";
-  };
+export type PublicMenuItemResponse = {
+  tableNumber: string;
   restaurantId: string;
-  categories: Array<{
+  item: {
     _id: string;
-    name: string;
-    description?: string;
-    displayOrder: number;
-  }>;
-  paging: {
-    page: number;
-    limit: number;
-    total: number;
-    hasMore: boolean;
-  };
-  items: Array<{
-    _id: string;
+    restaurantId: string;
     categoryId: string;
     name: string;
     description?: string;
@@ -34,7 +16,7 @@ export type PublicMenuResponse = {
     popularityCount: number;
     ratingAvg: number;
     ratingCount: number;
-    ratingBreakdown: Record<"1"|"2"|"3"|"4"|"5", number>;
+    ratingBreakdown: Record<"1" | "2" | "3" | "4" | "5", number>;
     photos: Array<{ _id: string; url: string; isPrimary: boolean }>;
     modifierGroups: Array<{
       _id: string;
@@ -51,27 +33,23 @@ export type PublicMenuResponse = {
         displayOrder: number;
       }>;
     }>;
-  }>;
+  };
 };
 
 function pickErrMessage(e: any) {
-  return (
-    e?.response?.data?.message ||
-    e?.message ||
-    "Can not get menu"
-  );
+  return e?.response?.data?.message || e?.message || "Can not get item";
 }
 
-export async function getPublicMenuApi(params: {
+export async function getPublicMenuItemApi(params: {
   table: string;
   token: string;
-  page?: number;
-  limit?: number;
-  q?: string;
-  categoryId?: string;
+  itemId: string;
 }) {
   try {
-    const res = await publicApi.get<PublicMenuResponse>("/public/menu", { params });
+    const res = await publicApi.get<PublicMenuItemResponse>(
+      `/public/menu/items/${params.itemId}`,
+      { params: { table: params.table, token: params.token } }
+    );
     return res.data;
   } catch (e: any) {
     throw new Error(pickErrMessage(e));
