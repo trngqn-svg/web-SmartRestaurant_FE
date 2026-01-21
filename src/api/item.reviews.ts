@@ -1,46 +1,27 @@
-// src/api/item.reviews.ts
 import api, { publicApi } from "./axios";
 
 function errMsg(e: any) {
   return e?.response?.data?.message || e?.message || "Request failed";
 }
 
-export type ReviewStatus = "published" | "hidden";
+export type ReviewUserDTO = {
+  userId: string | null;
+  fullName: string;
+  avatarUrl: string;
+};
 
 export type ItemReviewDTO = {
   reviewId: string;
   itemId: string;
   userId: string | null;
+  user?: ReviewUserDTO | null;
+
   rating: number;
   comment: string;
-  status?: ReviewStatus;
+  photoUrls?: string[];
+
   createdAt?: string;
   updatedAt?: string;
-};
-
-export type ListItemReviewsResponse = {
-  ok: boolean;
-  reviews: ItemReviewDTO[];
-};
-
-export type CreateReviewResponse = {
-  ok: boolean;
-  review: ItemReviewDTO;
-};
-
-export type UpdateReviewResponse = {
-  ok: boolean;
-  review: ItemReviewDTO;
-};
-
-export type DeleteReviewResponse = {
-  ok: boolean;
-  reviewId: string;
-};
-
-export type ListMyReviewsResponse = {
-  ok: boolean;
-  reviews: ItemReviewDTO[];
 };
 
 export async function listItemReviewsApi(args: { itemId: string; page?: number; limit?: number }) {
@@ -61,47 +42,54 @@ export async function listItemReviewsApi(args: { itemId: string; page?: number; 
   }
 }
 
-/** ✅ Auth: POST /api/items/:itemId/reviews */
 export async function createItemReviewApi(
   itemId: string,
-  body: { rating: number; comment?: string }
+  body: { rating: number; comment?: string; photos?: File[] }
 ) {
   try {
-    const res = await api.post(`/api/items/${encodeURIComponent(itemId)}/reviews`, body);
-    return res.data as CreateReviewResponse;
+    const fd = new FormData();
+    fd.set("rating", String(body.rating));
+    if (body.comment != null) fd.set("comment", body.comment);
+
+    for (const f of body.photos ?? []) fd.append("photos", f);
+
+    const res = await api.post(`/api/items/${encodeURIComponent(itemId)}/reviews`, fd);
+    return res.data as { ok: boolean; review: ItemReviewDTO };
   } catch (e: any) {
     throw new Error(errMsg(e));
   }
 }
 
-/** ✅ Auth: PATCH /api/reviews/:reviewId */
 export async function updateItemReviewApi(
   reviewId: string,
-  body: { rating?: number; comment?: string; status?: ReviewStatus }
+  body: { rating?: number; comment?: string; photos?: File[] }
 ) {
   try {
-    const res = await api.patch(`/api/reviews/${encodeURIComponent(reviewId)}`, body);
-    return res.data as UpdateReviewResponse;
+    const fd = new FormData();
+    if (body.rating != null) fd.set("rating", String(body.rating));
+    if (body.comment != null) fd.set("comment", body.comment);
+    for (const f of body.photos ?? []) fd.append("photos", f);
+
+    const res = await api.patch(`/api/reviews/${encodeURIComponent(reviewId)}`, fd);
+    return res.data as { ok: boolean; review: ItemReviewDTO };
   } catch (e: any) {
     throw new Error(errMsg(e));
   }
 }
 
-/** ✅ Auth: DELETE /api/reviews/:reviewId */
 export async function deleteItemReviewApi(reviewId: string) {
   try {
     const res = await api.delete(`/api/reviews/${encodeURIComponent(reviewId)}`);
-    return res.data as DeleteReviewResponse;
+    return res.data as { ok: boolean; reviewId: string };
   } catch (e: any) {
     throw new Error(errMsg(e));
   }
 }
 
-/** ✅ Auth: GET /api/reviews/me */
 export async function listMyReviewsApi() {
   try {
     const res = await api.get(`/api/reviews/me`);
-    return res.data as ListMyReviewsResponse;
+    return res.data as { ok: boolean; reviews: ItemReviewDTO[] };
   } catch (e: any) {
     throw new Error(errMsg(e));
   }

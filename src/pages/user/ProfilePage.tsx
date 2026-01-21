@@ -37,12 +37,11 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<MyProfile | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // profile form (keep your old state)
   const [fullName, setFullName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState<string>("");
   const [address, setAddress] = useState<string>("");
 
-  // password form (react-hook-form)
+  const [hasPassword, setHasPassword] = useState(false);
   const {
     register,
     handleSubmit,
@@ -74,6 +73,7 @@ export default function ProfilePage() {
       setFullName(p.fullName || "");
       setPhoneNumber(p.phoneNumber || "");
       setAddress(p.address || "");
+      setHasPassword(p.hasPassword || false);
     } catch (e: any) {
       setErr(e?.message || "Failed to load profile");
       setProfile(null);
@@ -182,7 +182,7 @@ export default function ProfilePage() {
         {/* Body */}
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
           {/* Left */}
-          <div className="lg:col-span-5 space-y-4">
+          <div className={`space-y-4 ${hasPassword ? "lg:col-span-5" : "lg:col-span-12"}`}>
             {/* Avatar card */}
             <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
               {loading ? (
@@ -288,134 +288,132 @@ export default function ProfilePage() {
           </div>
 
           {/* Right */}
-          <div className="lg:col-span-7 space-y-4">
-            {/* Security */}
-            <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2 text-sm font-extrabold text-slate-900">
-                <Lock className="h-4 w-4" />
-                Security (Change password)
-              </div>
+          {hasPassword && (
+            <div className="lg:col-span-7 space-y-4">
+              {/* Security */}
+              <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center gap-2 text-sm font-extrabold text-slate-900">
+                  <Lock className="h-4 w-4" />
+                  Security (Change password)
+                </div>
 
-              <form onSubmit={onSubmitPassword} className="mt-4 grid grid-cols-1 gap-3">
-                {/* current */}
-                <div>
-                  <div className="text-[11px] font-bold text-slate-500 mb-1">Current password</div>
-                  <input
-                    type="password"
+                <form onSubmit={onSubmitPassword} className="mt-4 grid grid-cols-1 gap-3">
+                  {/* current */}
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-500 mb-1">Current password</div>
+                    <input
+                      type="password"
+                      className={cn(
+                        "w-full rounded-xl border bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none",
+                        "focus:border-[#E2B13C] focus:ring-2 focus:ring-[#E2B13C]/20",
+                        errors.currentPassword ? "border-rose-300" : "border-slate-200"
+                      )}
+                      {...register("currentPassword", {
+                        required: "Current password is required",
+                      })}
+                    />
+                    {errors.currentPassword ? (
+                      <div className="mt-1 text-xs font-semibold text-rose-600">
+                        {errors.currentPassword.message}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* new + confirm */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-[11px] font-bold text-slate-500 mb-1">New password</div>
+                      <input
+                        type="password"
+                        className={cn(
+                          "w-full rounded-xl border bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none",
+                          "focus:border-[#E2B13C] focus:ring-2 focus:ring-[#E2B13C]/20",
+                          errors.newPassword ? "border-rose-300" : "border-slate-200"
+                        )}
+                        {...register("newPassword", {
+                          validate: validateStrongPassword,
+                        })}
+                      />
+                      {errors.newPassword ? (
+                        <div className="mt-1 text-xs font-semibold text-rose-600">
+                          {errors.newPassword.message as any}
+                        </div>
+                      ) : null}
+
+                      {/* strength */}
+                      <div className="mt-2">
+                        <div className="flex items-center justify-between">
+                          <div className="text-[11px] font-bold text-slate-500">Strength</div>
+                          <div className="text-[11px] font-extrabold text-slate-700">
+                            {strength.label}
+                          </div>
+                        </div>
+
+                        <div className="mt-1 h-2 w-full rounded-full bg-slate-100 overflow-hidden border border-slate-200">
+                          <div
+                            className="h-full rounded-full transition-all bg-slate-900"
+                            style={{ width: `${strengthPct}%` }}
+                          />
+                        </div>
+
+                        <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-slate-500">
+                          <div className={cn(strength.checks.length8 ? "text-slate-900 font-semibold" : "")}>
+                            • 8+ chars
+                          </div>
+                          <div className={cn(strength.checks.upper ? "text-slate-900 font-semibold" : "")}>
+                            • Uppercase
+                          </div>
+                          <div className={cn(strength.checks.lower ? "text-slate-900 font-semibold" : "")}>
+                            • Lowercase
+                          </div>
+                          <div className={cn(strength.checks.number ? "text-slate-900 font-semibold" : "")}>
+                            • Number
+                          </div>
+                          <div className={cn(strength.checks.special ? "text-slate-900 font-semibold" : "")}>
+                            • Special
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-bold text-slate-500 mb-1">Confirm</div>
+                      <input
+                        type="password"
+                        className={cn(
+                          "w-full rounded-xl border bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none",
+                          "focus:border-[#E2B13C] focus:ring-2 focus:ring-[#E2B13C]/20",
+                          errors.confirmPassword ? "border-rose-300" : "border-slate-200"
+                        )}
+                        {...register("confirmPassword", {
+                          required: "Confirm password is required",
+                          validate: (v) => v === watch("newPassword") || "Confirm password does not match",
+                        })}
+                      />
+                      {errors.confirmPassword ? (
+                        <div className="mt-1 text-xs font-semibold text-rose-600">
+                          {errors.confirmPassword.message}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={pwdSaving || !isValid}
                     className={cn(
-                      "w-full rounded-xl border bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none",
-                      "focus:border-[#E2B13C] focus:ring-2 focus:ring-[#E2B13C]/20",
-                      errors.currentPassword ? "border-rose-300" : "border-slate-200"
+                      "mt-1 w-full rounded-2xl px-4 py-3 text-sm font-extrabold shadow-sm",
+                      pwdSaving || !isValid
+                        ? "bg-slate-100 text-slate-400"
+                        : "bg-slate-900 text-[#E2B13C] hover:bg-slate-800 active:scale-[0.99]"
                     )}
-                    {...register("currentPassword", {
-                      required: "Current password is required",
-                    })}
-                  />
-                  {errors.currentPassword ? (
-                    <div className="mt-1 text-xs font-semibold text-rose-600">
-                      {errors.currentPassword.message}
-                    </div>
-                  ) : null}
-                </div>
-
-                {/* new + confirm */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <div className="text-[11px] font-bold text-slate-500 mb-1">New password</div>
-                    <input
-                      type="password"
-                      className={cn(
-                        "w-full rounded-xl border bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none",
-                        "focus:border-[#E2B13C] focus:ring-2 focus:ring-[#E2B13C]/20",
-                        errors.newPassword ? "border-rose-300" : "border-slate-200"
-                      )}
-                      {...register("newPassword", {
-                        validate: validateStrongPassword,
-                      })}
-                    />
-                    {errors.newPassword ? (
-                      <div className="mt-1 text-xs font-semibold text-rose-600">
-                        {errors.newPassword.message as any}
-                      </div>
-                    ) : null}
-
-                    {/* strength */}
-                    <div className="mt-2">
-                      <div className="flex items-center justify-between">
-                        <div className="text-[11px] font-bold text-slate-500">Strength</div>
-                        <div className="text-[11px] font-extrabold text-slate-700">
-                          {strength.label}
-                        </div>
-                      </div>
-
-                      <div className="mt-1 h-2 w-full rounded-full bg-slate-100 overflow-hidden border border-slate-200">
-                        <div
-                          className="h-full rounded-full transition-all bg-slate-900"
-                          style={{ width: `${strengthPct}%` }}
-                        />
-                      </div>
-
-                      <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-slate-500">
-                        <div className={cn(strength.checks.length8 ? "text-slate-900 font-semibold" : "")}>
-                          • 8+ chars
-                        </div>
-                        <div className={cn(strength.checks.upper ? "text-slate-900 font-semibold" : "")}>
-                          • Uppercase
-                        </div>
-                        <div className={cn(strength.checks.lower ? "text-slate-900 font-semibold" : "")}>
-                          • Lowercase
-                        </div>
-                        <div className={cn(strength.checks.number ? "text-slate-900 font-semibold" : "")}>
-                          • Number
-                        </div>
-                        <div className={cn(strength.checks.special ? "text-slate-900 font-semibold" : "")}>
-                          • Special
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-[11px] font-bold text-slate-500 mb-1">Confirm</div>
-                    <input
-                      type="password"
-                      className={cn(
-                        "w-full rounded-xl border bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none",
-                        "focus:border-[#E2B13C] focus:ring-2 focus:ring-[#E2B13C]/20",
-                        errors.confirmPassword ? "border-rose-300" : "border-slate-200"
-                      )}
-                      {...register("confirmPassword", {
-                        required: "Confirm password is required",
-                        validate: (v) => v === watch("newPassword") || "Confirm password does not match",
-                      })}
-                    />
-                    {errors.confirmPassword ? (
-                      <div className="mt-1 text-xs font-semibold text-rose-600">
-                        {errors.confirmPassword.message}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={pwdSaving || !isValid}
-                  className={cn(
-                    "mt-1 w-full rounded-2xl px-4 py-3 text-sm font-extrabold shadow-sm",
-                    pwdSaving || !isValid
-                      ? "bg-slate-100 text-slate-400"
-                      : "bg-slate-900 text-[#E2B13C] hover:bg-slate-800 active:scale-[0.99]"
-                  )}
-                >
-                  {pwdSaving ? "Updating..." : "Change password"}
-                </button>
-
-                <div className="text-xs text-slate-500">
-                  If you logged in via Google and don’t have a password yet, backend should return an error for change-password.
-                </div>
-              </form>
-            </div>
+                  >
+                    {pwdSaving ? "Updating..." : "Change password"}
+                  </button>
+                </form>
+              </div>
           </div>
+          )}
         </div>
       </div>
     </div>

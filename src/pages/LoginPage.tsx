@@ -131,7 +131,9 @@ export default function LoginPage() {
                     {errors.password.message}
                   </p>
                 )}
-                
+              </div>
+
+              <div className="flex justify-end">
                 <button
                   type="button"
                   onClick={() => {

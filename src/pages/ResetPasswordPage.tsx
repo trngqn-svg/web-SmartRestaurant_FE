@@ -1,9 +1,49 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { UtensilsCrossed, Loader2, Lock } from "lucide-react";
 import { message } from "antd";
 import { resetPasswordApi } from "../api/auth.password";
 import { PasswordResetStore } from "../auth/passwordReset.store";
+import {
+  calcPasswordStrength,
+  validateStrongPassword,
+  type PasswordStrength,
+} from "../utils/password";
+
+function StrengthBar({ s }: { s: PasswordStrength }) {
+  const pct = ((s.score + 1) / 5) * 100;
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold text-slate-500">
+          Strength: <span className="font-extrabold text-slate-800">{s.label}</span>
+        </span>
+        <span className="text-[11px] font-semibold text-slate-400">{s.score}/4</span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+        <div className="h-2 rounded-full bg-slate-900 transition-all" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function CheckItem({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className={[
+          "inline-flex h-4 w-4 items-center justify-center rounded-full border",
+          ok ? "bg-green-50 border-green-200 text-green-600" : "bg-white border-slate-200 text-slate-300",
+        ].join(" ")}
+      >
+        <span className={ok ? "font-bold" : "opacity-60"}>✓</span>
+      </span>
+      <span className={["text-[12px] font-semibold", ok ? "text-slate-700" : "text-slate-400"].join(" ")}>
+        {label}
+      </span>
+    </div>
+  );
+}
 
 export default function ResetPasswordPage() {
   const nav = useNavigate();
@@ -14,6 +54,7 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
 
   const resetToken = PasswordResetStore.getResetToken();
+  const strength = useMemo(() => calcPasswordStrength(newPassword || ""), [newPassword]);
 
   useEffect(() => {
     if (!resetToken) {
@@ -25,14 +66,17 @@ export default function ResetPasswordPage() {
   }, [resetToken, nav, sp]);
 
   async function onSubmit() {
-    if (newPassword.length < 6) {
-      message.error("The password must be at least 6 characters long.");
+    const pwCheck = validateStrongPassword(newPassword);
+    if (pwCheck !== true) {
+      message.error(pwCheck);
       return;
     }
+
     if (newPassword !== confirmPassword) {
       message.error("Password confirmation does not match.");
       return;
     }
+
     if (!resetToken) return;
 
     try {
@@ -43,9 +87,7 @@ export default function ResetPasswordPage() {
       message.success("Password changed successfully!");
 
       const returnTo = sp.get("returnTo");
-      nav(returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login", {
-        replace: true,
-      });
+      nav(returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login", { replace: true });
     } catch (e: any) {
       message.error(e?.response?.data?.message ?? "Unable to change password");
     } finally {
@@ -97,6 +139,19 @@ export default function ResetPasswordPage() {
                   autoComplete="new-password"
                 />
               </div>
+
+              {newPassword ? (
+                <>
+                  <StrengthBar s={strength} />
+                  <div className="mt-3 grid grid-cols-1 gap-1.5">
+                    <CheckItem ok={strength.checks.length8} label="At least 8 characters" />
+                    <CheckItem ok={strength.checks.lower} label="Lowercase letter (a-z)" />
+                    <CheckItem ok={strength.checks.upper} label="Uppercase letter (A-Z)" />
+                    <CheckItem ok={strength.checks.number} label="Number (0-9)" />
+                    <CheckItem ok={strength.checks.special} label="Special character (!@#...)" />
+                  </div>
+                </>
+              ) : null}
             </div>
 
             <div className="space-y-2 mt-4">

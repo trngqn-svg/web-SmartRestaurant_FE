@@ -5,8 +5,6 @@ import {
   UtensilsCrossed,
   Loader2,
   CheckCircle2,
-  Eye,
-  EyeOff,
 } from "lucide-react";
 import { registerApi } from "../api/auth";
 import { message } from "antd";
@@ -115,10 +113,6 @@ export default function RegisterPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
-
-  // 👇 thêm state bật/tắt nhìn mật khẩu
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const {
     register,
@@ -247,28 +241,18 @@ export default function RegisterPage() {
                   Password
                 </label>
 
-                {/* 👇 wrapper để đặt nút eye */}
-                <div className="relative">
+                <div>
                   <input
-                    type={showPassword ? "text" : "password"}
+                    type="password"
                     {...register("password", {
                       validate: (v) => validateStrongPassword(v),
                       onChange: () => {
                         trigger("confirmPassword");
                       },
                     })}
-                    className="w-full h-12 rounded-2xl border border-slate-100 bg-slate-50 pl-5 pr-12 text-[15px] outline-none transition-all focus:bg-white focus:ring-4 focus:ring-[#E2B13C]/10 focus:border-[#E2B13C]"
+                    className="w-full h-12 rounded-2xl border border-slate-100 bg-slate-50 px-5 text-[15px] outline-none transition-all focus:bg-white focus:ring-4 focus:ring-[#E2B13C]/10 focus:border-[#E2B13C]"
                     placeholder="Enter your password"
                   />
-
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
                 </div>
 
                 {password ? (
@@ -299,23 +283,14 @@ export default function RegisterPage() {
 
                 <div className="relative">
                   <input
-                    type={showConfirmPassword ? "text" : "password"}
+                    type="password"
                     {...register("confirmPassword", {
                       required: "Confirm password is required",
                       validate: (v) => v === password || "Passwords do not match",
                     })}
-                    className="w-full h-12 rounded-2xl border border-slate-100 bg-slate-50 pl-5 pr-12 text-[15px] outline-none transition-all focus:bg-white focus:ring-4 focus:ring-[#E2B13C]/10 focus:border-[#E2B13C]"
+                    className="w-full h-12 rounded-2xl border border-slate-100 bg-slate-50 px-5 text-[15px] outline-none transition-all focus:bg-white focus:ring-4 focus:ring-[#E2B13C]/10 focus:border-[#E2B13C]"
                     placeholder="Confirm your password"
                   />
-
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
-                    aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
-                  >
-                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
                 </div>
 
                 {errors.confirmPassword && (
