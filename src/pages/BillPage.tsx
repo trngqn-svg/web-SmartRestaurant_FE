@@ -392,7 +392,7 @@ export default function BillPage() {
                     <div className="min-w-0">
                       <div className="text-sm font-extrabold">Online payment</div>
                       <div className={cn("text-xs", method === "ONLINE" ? "text-white/80" : "text-slate-500")}>
-                        Pay by card / QR (mock)
+                        Pay by card / QR
                       </div>
                     </div>
                   </div>

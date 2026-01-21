@@ -23,7 +23,7 @@ export async function createVnpayPaymentApi(billId: string) {
 export async function verifyVnpayReturnApi(queryString: string) {
   try {
     const qs = queryString?.startsWith("?") ? queryString : `?${queryString || ""}`;
-    const res = await publicApi.get(`/api/payments/vnpay/return${qs}`);
+    const res = await publicApi.get(`/api/payment/vnpay-return${qs}`);
     return res.data as {
       ok: boolean;
       verified: boolean;
@@ -31,6 +31,21 @@ export async function verifyVnpayReturnApi(queryString: string) {
       responseCode: string;
       transactionNo?: string;
       message?: string;
+    };
+  } catch (e: any) {
+    throw new Error(errMsg(e));
+  }
+}
+
+export async function getVnpayStatusApi(txnRef: string) {
+  try {
+    const res = await publicApi.get(`/api/payments/vnpay/status?txnRef=${encodeURIComponent(txnRef)}`);
+    return res.data as {
+      txnRef: string;
+      paymentStatus: "PENDING" | "SUCCESS" | "FAILED";
+      vnpResponseCode?: string | null;
+      vnpTransactionNo?: string | null;
+      bill?: { billId: string; status: string; paidAt?: string | null };
     };
   } catch (e: any) {
     throw new Error(errMsg(e));
