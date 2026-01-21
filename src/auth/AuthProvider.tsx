@@ -46,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await logoutApi();
     } finally {
+      localStorage.removeItem("customer_ctx");
       clearAccessToken();
       setUser(null);
       window.location.href = "/login";

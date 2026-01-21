@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pagination } from "antd";
-import { ArrowLeft, Calendar } from "lucide-react";
+import { ArrowLeft, Calendar, ChevronDown, ChevronUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { listMyBillsApi, type MyBill, type ListMyBillsParams } from "../../api/me.bill";
@@ -34,6 +34,10 @@ const PRESET_OPTIONS: Array<{ value: Preset; label: string }> = [
   { value: "custom", label: "Custom range" },
 ];
 
+function sumMods(mods: Array<{ priceAdjustmentCents: number }>) {
+  return (mods ?? []).reduce((s, m) => s + Number(m.priceAdjustmentCents || 0), 0);
+}
+
 export default function UserBillsPage() {
   const nav = useNavigate();
 
@@ -49,6 +53,8 @@ export default function UserBillsPage() {
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
+
+  const [openBillId, setOpenBillId] = useState<string | null>(null);
 
   const params: ListMyBillsParams = useMemo(() => {
     const p: ListMyBillsParams = { page, limit };
@@ -68,6 +74,12 @@ export default function UserBillsPage() {
       const r = await listMyBillsApi(params);
       setBills(r.bills ?? []);
       setTotal(Number(r.total ?? (r.bills?.length ?? 0)));
+
+      // đóng details nếu bill đang mở không còn trong page
+      setOpenBillId((cur) => {
+        if (!cur) return cur;
+        return (r.bills ?? []).some((b) => b.billId === cur) ? cur : null;
+      });
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load bills");
     } finally {
@@ -108,13 +120,6 @@ export default function UserBillsPage() {
               <div className="text-xs text-slate-500">View and filter your bill history</div>
             </div>
           </div>
-
-          <button
-            onClick={() => load()}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-extrabold text-[#E2B13C] hover:bg-slate-800 active:scale-[0.98]"
-          >
-            Refresh
-          </button>
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
@@ -252,6 +257,7 @@ export default function UserBillsPage() {
                     {bills.map((b) => {
                       const st = statusBadge(b.status);
                       const when = b.paidAt || b.requestedAt || b.createdAt;
+                      const isOpen = openBillId === b.billId;
 
                       return (
                         <div key={b.billId} className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -264,6 +270,11 @@ export default function UserBillsPage() {
                                 Bill: <span className="font-mono">{String(b.billId).slice(-10)}</span>
                               </div>
                               {when ? <div className="mt-1 text-xs text-slate-500">{fmtTime(when)}</div> : null}
+                              {b.note ? (
+                                <div className="mt-2 text-xs text-slate-600">
+                                  <span className="font-bold">Note:</span> {b.note}
+                                </div>
+                              ) : null}
                             </div>
 
                             <div className="text-right">
@@ -278,8 +289,121 @@ export default function UserBillsPage() {
                                   </span>
                                 ) : null}
                               </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setOpenBillId(isOpen ? null : b.billId)}
+                                className="mt-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-900 hover:bg-slate-50"
+                              >
+                                {isOpen ? (
+                                  <>
+                                    Hide details <ChevronUp className="h-4 w-4" />
+                                  </>
+                                ) : (
+                                  <>
+                                    Show details <ChevronDown className="h-4 w-4" />
+                                  </>
+                                )}
+                              </button>
                             </div>
                           </div>
+
+                          {/* Details */}
+                          {isOpen ? (
+                            <div className="mt-4 border-t border-slate-200 pt-4">
+                              {(!b.orders || b.orders.length === 0) ? (
+                                <div className="text-sm text-slate-600">No order details.</div>
+                              ) : (
+                                <div className="space-y-3">
+                                  {b.orders.map((o) => (
+                                    <div key={o.orderId} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <div className="text-xs font-extrabold text-slate-900">
+                                            Order <span className="font-mono">{String(o.orderId).slice(-8)}</span>
+                                          </div>
+                                          <div className="mt-1 text-[11px] text-slate-500">
+                                            {o.createdAt ? fmtTime(o.createdAt) : null}
+                                            {o.status ? <> • {String(o.status).toUpperCase()}</> : null}
+                                          </div>
+                                          {o.note ? (
+                                            <div className="mt-1 text-[11px] text-slate-600">
+                                              <span className="font-bold">Note:</span> {o.note}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                        <div className="text-right">
+                                          <div className="text-sm font-extrabold text-slate-900">
+                                            {formatMoneyFromCents(o.totalCents ?? 0)}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div className="mt-3 space-y-2">
+                                        {(o.lines ?? []).map((ln) => {
+                                          const modsAdj = sumMods(ln.modifiers ?? []);
+                                          return (
+                                            <div key={ln.lineId} className="rounded-xl border border-slate-200 bg-white p-3">
+                                              <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                  <div className="text-sm font-extrabold text-slate-900">
+                                                    {ln.nameSnapshot}
+                                                  </div>
+                                                  <div className="mt-1 text-xs text-slate-600">
+                                                    Qty: <span className="font-bold">{ln.qty}</span> • Unit:{" "}
+                                                    <span className="font-bold">
+                                                      {formatMoneyFromCents(ln.unitPriceCents ?? 0)}
+                                                    </span>
+                                                    {modsAdj !== 0 ? (
+                                                      <>
+                                                        {" "}
+                                                        • Mods:{" "}
+                                                        <span className="font-bold">
+                                                          {formatMoneyFromCents(modsAdj)}
+                                                        </span>
+                                                      </>
+                                                    ) : null}
+                                                  </div>
+                                                  {ln.note ? (
+                                                    <div className="mt-1 text-xs text-slate-600">
+                                                      <span className="font-bold">Line note:</span> {ln.note}
+                                                    </div>
+                                                  ) : null}
+
+                                                  {(ln.modifiers ?? []).length > 0 ? (
+                                                    <div className="mt-2 flex flex-wrap gap-2">
+                                                      {(ln.modifiers ?? []).map((m, idx) => (
+                                                        <span
+                                                          key={idx}
+                                                          className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-bold text-slate-700"
+                                                        >
+                                                          {(m.groupNameSnapshot ? `${m.groupNameSnapshot}: ` : "") +
+                                                            (m.optionNameSnapshot ?? "—")}
+                                                          {Number(m.priceAdjustmentCents || 0) !== 0
+                                                            ? ` (${formatMoneyFromCents(m.priceAdjustmentCents)})`
+                                                            : ""}
+                                                        </span>
+                                                      ))}
+                                                    </div>
+                                                  ) : null}
+                                                </div>
+
+                                                <div className="text-right">
+                                                  <div className="text-sm font-extrabold text-slate-900">
+                                                    {formatMoneyFromCents(ln.lineTotalCents ?? 0)}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                       );
                     })}

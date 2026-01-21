@@ -55,8 +55,7 @@ export default function ItemDetailPage() {
   const table = sp.get("table") || "";
   const token = sp.get("token") || "";
 
-  // ✅ NEW: fetch item by endpoint /public/menu/items/:itemId
-  const { item, loading, err, tableNumber } = usePublicMenuItem(table, token, id);
+  const { item, loading, err, tableNumber, refetch: refetchItem } = usePublicMenuItem(table, token, id);
 
   const addLine = useCartStore((s) => s.addLine);
 
@@ -64,7 +63,6 @@ export default function ItemDetailPage() {
     return `?table=${encodeURIComponent(table)}&token=${encodeURIComponent(token)}`;
   }, [table, token]);
 
-  // ✅ Related items (server-side by category)
   const [related, setRelated] = useState<any[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -525,14 +523,26 @@ export default function ItemDetailPage() {
 
             {/* Related items */}
             {related.length > 0 && (
-              <div className="rounded-[28px] border border-slate-100 bg-white p-4 shadow-sm">
-                <div className="flex items-end justify-between">
-                  <div className="text-base font-extrabold tracking-tight text-slate-900">Related items</div>
+              <div className="rounded-[24px] md:rounded-[28px] border border-slate-100 bg-white p-4 md:p-5 shadow-sm">
+                <div className="flex items-end justify-between gap-3">
+                  <div className="text-base font-extrabold tracking-tight text-slate-900">
+                    Related items
+                  </div>
                 </div>
 
-                <div className="mt-4 flex gap-3 overflow-x-auto no-scrollbar pb-1 snap-x snap-mandatory">
+                <div
+                  className={cn(
+                    "mt-4",
+                    "-mx-4 px-4 md:mx-0 md:px-0",
+                    "grid grid-flow-col auto-cols-[78%] sm:auto-cols-[46%] md:auto-cols-[32%] lg:auto-cols-[28%]",
+                    "gap-3 overflow-x-auto pb-2 no-scrollbar",
+                    "snap-x snap-mandatory overscroll-x-contain",
+                    "scroll-px-4 md:scroll-px-0"
+                  )}
+                >
                   {related.map((rit: any) => {
-                    const rimg = rit.photos?.find((p: any) => p.isPrimary)?.url || rit.photos?.[0]?.url;
+                    const rimg =
+                      rit.photos?.find((p: any) => p.isPrimary)?.url || rit.photos?.[0]?.url;
 
                     return (
                       <button
@@ -542,14 +552,17 @@ export default function ItemDetailPage() {
                           nav(`/menu/item/${rit._id}${qstr}`);
                           window.scrollTo({ top: 0, behavior: "smooth" });
                         }}
-                        className="group w-[180px] shrink-0 snap-start overflow-hidden rounded-2xl border border-slate-100 bg-white text-left shadow-sm transition hover:border-[#E2B13C]/40 hover:shadow-md active:scale-[0.99]"
+                        className={cn(
+                          "snap-start overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition active:scale-[0.99]",
+                          "border-slate-100 hover:border-[#E2B13C]/40 hover:shadow-md"
+                        )}
                       >
-                        <div className="relative h-28 w-full bg-slate-100">
+                        <div className="relative aspect-[16/10] w-full bg-slate-100">
                           {rimg ? (
                             <img
                               src={rimg}
                               alt={rit.name}
-                              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
                             />
                           ) : (
                             <div className="flex h-full items-center justify-center text-slate-300">
@@ -565,12 +578,16 @@ export default function ItemDetailPage() {
                         </div>
 
                         <div className="p-3">
-                          <div className="truncate text-sm font-extrabold text-slate-900">{rit.name}</div>
+                          <div className="line-clamp-2 min-h-[40px] text-sm font-extrabold text-slate-900">
+                            {rit.name}
+                          </div>
 
-                          <div className="mt-1 flex items-center justify-between gap-2">
-                            <div className="text-sm font-black text-slate-800">{formatMoneyFromCents(rit.priceCents)}</div>
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <div className="text-sm font-black text-slate-800 whitespace-nowrap">
+                              {formatMoneyFromCents(rit.priceCents)}
+                            </div>
 
-                            <div className="flex items-center gap-1 text-xs font-bold text-slate-600">
+                            <div className="flex items-center gap-1 text-xs font-bold text-slate-600 shrink-0">
                               <Star className="h-3.5 w-3.5 fill-[#E2B13C] text-[#E2B13C]" />
                               {(rit.ratingAvg || 0).toFixed(1)}
                             </div>
@@ -584,9 +601,12 @@ export default function ItemDetailPage() {
             )}
 
             {/* Reviews */}
-            <div className="rounded-[28px] border border-slate-100 bg-white p-4 shadow-sm">
-              <ReviewsSection itemId={item._id} />
-            </div>
+            <ReviewsSection
+              itemId={item._id}
+              onStatsChanged={() => {
+                refetchItem();
+              }}
+            />
           </div>
         </div>
       </div>

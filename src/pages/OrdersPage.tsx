@@ -6,9 +6,10 @@ import { formatMoneyFromCents } from "../utils/money";
 import { listMyOrdersApi, type PublicOrder } from "../api/public.order";
 import { Utensils, Receipt } from "lucide-react";
 import { getActiveSessionApi, type PublicTableSession } from "../api/public.session";
-import { requestBillApi } from "../api/public.bill";
+import { requestBillApi, requestBillAuthedApi } from "../api/public.bill";
 import { message } from "antd";
 import { config } from "../config/websocket";
+import { useAuth } from "../auth/AuthProvider";
 
 function statusLabel(s: string) {
   switch (s) {
@@ -138,6 +139,7 @@ function StepLine({ on }: { on: boolean }) {
 }
 
 export default function OrdersPage() {
+  const { user } = useAuth();
   const nav = useNavigate();
   const [sp] = useSearchParams();
 
@@ -293,7 +295,11 @@ export default function OrdersPage() {
 
     setRequestingBill(true);
     try {
-      await requestBillApi({ sessionId: session.sessionId });
+      if (user){
+        await requestBillAuthedApi({ sessionId: session.sessionId });
+      } else {
+        await requestBillApi({ sessionId: session.sessionId });
+      }
       message.success("Bill requested");
       nav(`/bill${q}`);
     } catch (e: any) {

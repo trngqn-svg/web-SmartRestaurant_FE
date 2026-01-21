@@ -47,7 +47,6 @@ export default function MenuPage() {
   const table = sp.get("table") || "";
   const token = sp.get("token") || "";
 
-  // cart tableId
   const setTableId = useCartStore((s) => s.setTableId);
   useEffect(() => {
     if (table) setTableId(table);
@@ -264,7 +263,7 @@ export default function MenuPage() {
 
                     <div className="flex items-center gap-2 mt-1">
                       <Star className="w-4 h-4 text-[#E2B13C] fill-[#E2B13C]" />
-                      <span className="text-sm font-bold">{it.ratingAvg || 0.0}</span>
+                      <span className="text-sm font-bold">{(Number(it.ratingAvg) || 0).toFixed(1)}</span>
                       <span className="text-sm text-orange-500">({it.ratingCount || 0} reviews)</span>
                     </div>
 

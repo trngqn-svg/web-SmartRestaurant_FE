@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getPublicMenuItemApi, type PublicMenuItemResponse } from "../api/public.menu-item";
 import { openTableSessionApi } from "../api/public.session";
 
@@ -11,6 +11,37 @@ export function usePublicMenuItem(table: string, token: string, itemId: string) 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
+  const ck = useMemo(() => {
+    if (!table || !token || !itemId) return "";
+    return cacheKey(table, token, itemId);
+  }, [table, token, itemId]);
+
+  const fetcher = useCallback(
+    async (opts?: { bypassCache?: boolean }) => {
+      if (!table || !token || !itemId) throw new Error("QR invalid (invalid table/token/item).");
+
+      await openTableSessionApi({ table, token });
+
+      const bypass = !!opts?.bypassCache;
+
+      if (!bypass && ck) {
+        const cached = sessionStorage.getItem(ck);
+        if (cached) {
+          try {
+            setData(JSON.parse(cached));
+            setLoading(false);
+          } catch {}
+        }
+      }
+
+      const res = await getPublicMenuItemApi({ table, token, itemId });
+      setData(res);
+      if (ck) sessionStorage.setItem(ck, JSON.stringify(res));
+      return res;
+    },
+    [table, token, itemId, ck]
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -18,26 +49,7 @@ export function usePublicMenuItem(table: string, token: string, itemId: string) 
       try {
         setLoading(true);
         setErr(null);
-
-        if (!table || !token || !itemId) {
-          throw new Error("QR invalid (invalid table/token/item).");
-        }
-
-        // idempotent
-        await openTableSessionApi({ table, token });
-
-        const ck = cacheKey(table, token, itemId);
-        const cached = sessionStorage.getItem(ck);
-        if (cached) {
-          if (!cancelled) setData(JSON.parse(cached));
-          return;
-        }
-
-        const res = await getPublicMenuItemApi({ table, token, itemId });
-        if (cancelled) return;
-
-        setData(res);
-        sessionStorage.setItem(ck, JSON.stringify(res));
+        await fetcher({ bypassCache: false });
       } catch (e: any) {
         if (!cancelled) {
           setErr(e?.message || "Unable to load item.");
@@ -52,7 +64,20 @@ export function usePublicMenuItem(table: string, token: string, itemId: string) 
     return () => {
       cancelled = true;
     };
-  }, [table, token, itemId]);
+  }, [fetcher]);
+
+  const refetch = useCallback(async () => {
+    try {
+      setErr(null);
+      await fetcher({ bypassCache: true });
+    } catch (e: any) {
+      setErr(e?.message || "Unable to load item.");
+    }
+  }, [fetcher]);
+
+  const clearCache = useCallback(() => {
+    if (ck) sessionStorage.removeItem(ck);
+  }, [ck]);
 
   return {
     item: data?.item ?? null,
@@ -60,5 +85,7 @@ export function usePublicMenuItem(table: string, token: string, itemId: string) 
     restaurantId: data?.restaurantId ?? "",
     loading,
     err,
+    refetch,
+    clearCache,
   };
 }
